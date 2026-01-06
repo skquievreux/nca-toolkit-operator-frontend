@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "nca-toolkit": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "nca-toolkit-mcp",
+        "python",
+        "-c",
+        "import sys; import json; from flask import Flask; app = Flask(__name__); sys.stdout.write(json.dumps({'status': 'ready', 'endpoints': ['/v1/audio/concatenate', '/v1/code/execute/python', '/v1/ffmpeg/compose', '/v1/image/convert/video', '/v1/image/screenshot/webpage', '/v1/media/convert', '/v1/media/convert/mp3', '/v1/media/download', '/v1/media/transcribe', '/v1/media/silence', '/v1/media/metadata', '/v1/s3/upload', '/v1/video/add/audio', '/v1/video/add/captions', '/v1/video/add/watermark', '/v1/video/clip', '/v1/video/concatenate', '/v1/video/generate/captions', '/v1/video/overlay', '/v1/video/resize', '/v1/video/reverse', '/v1/video/rotate', '/v1/video/speed', '/v1/video/split/scenes', '/v1/video/thumbnail']}))"
+      ],
+      "env": {
+        "API_KEY": "change_me_to_secure_key_123",
+        "API_BASE_URL": "http://localhost:8080"
+      }
+    }
+  }
+}
