@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔄 Bitte neu laden!</title>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a;
+            color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 3rem;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .steps {
+            text-align: left;
+            background: #334155;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 1rem 0;
+            font-size: 1.1rem;
+        }
+
+        .step-number {
+            background: #6366f1;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        button {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #4f46e5;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #334155;
+        }
+
+        .btn-secondary:hover {
+            background: #475569;
+        }
+
+        code {
+            background: #0f172a;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🔄</h1>
+        <h2>Bitte laden Sie die Seite neu!</h2>
+
+        <p style="font-size: 1.1rem; margin-bottom: 2rem;">
+            Ich habe die Logs verbessert, aber Ihr Browser nutzt noch die alte Version.
+        </p>
+
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <div>Drücken Sie <code>Strg + F5</code> (Hard Reload)</div>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <div>Oder klicken Sie unten auf "Neu laden"</div>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <div>Klicken Sie auf <code>📄 Icon</code> (Live-Logs)</div>
+            </div>
+            <div class="step">
+                <div class="step-number">4</div>
+                <div>Senden Sie einen Request</div>
+            </div>
+            <div class="step">
+                <div class="step-number">5</div>
+                <div>Sehen Sie ALLE Details! 🎉</div>
+            </div>
+        </div>
+
+        <button onclick="location.reload(true)">🔄 Jetzt neu laden</button>
+        <button onclick="window.location.href='/'" class="btn-secondary">🏠 Zur Homepage</button>
+
+        <p style="margin-top: 2rem; font-size: 0.9rem; color: #94a3b8;">
+            Nach dem Reload sehen Sie:<br>
+            • Datei-Details (Name, Größe, Typ)<br>
+            • Request-Dauer<br>
+            • Job-ID<br>
+            • Intent & Confidence<br>
+            • Parameter<br>
+            • Ergebnisse
+        </p>
+    </div>
+
+    <script>
+        // Auto-reload nach 3 Sekunden
+        setTimeout(() => {
+            if (confirm('Seite jetzt neu laden?')) {
+                location.reload(true);
+            }
+        }, 3000);
+    </script>
+</body>
+
+</html>

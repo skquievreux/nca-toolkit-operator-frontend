@@ -1,73 +1,112 @@
-# NCA Toolkit Backend Server - Setup & Start
-# Dieses Skript richtet das virtuelle Environment ein und startet den Server
+# Smart Server Start Script
+# Verhindert mehrfache Server-Starts
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  NCA Toolkit Backend Server Setup" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
+Write-Host "`n╔════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  🚀 NCA Toolkit Server Manager         ║" -ForegroundColor Cyan
+Write-Host "╚════════════════════════════════════════╝`n" -ForegroundColor Cyan
 
-# Wechsle ins server-Verzeichnis
-Set-Location -Path "$PSScriptRoot\server"
+# 1. Prüfe ob Server bereits läuft
+Write-Host "🔍 Prüfe laufende Server..." -ForegroundColor Yellow
+$existingProcesses = Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*mcp-nca-toolkit*server*" }
 
-# 1. Prüfe Python
-Write-Host "[1/5] Prüfe Python-Installation..." -ForegroundColor Yellow
-try {
-    $pythonVersion = python --version 2>&1
-    Write-Host "✓ $pythonVersion gefunden" -ForegroundColor Green
+if ($existingProcesses) {
+    Write-Host "⚠️  Server läuft bereits! ($($existingProcesses.Count) Prozesse)" -ForegroundColor Yellow
+    Write-Host "`nOptionen:" -ForegroundColor Cyan
+    Write-Host "  1) Bestehenden Server nutzen" -ForegroundColor Green
+    Write-Host "  2) Server neu starten" -ForegroundColor Yellow
+    Write-Host "  3) Abbrechen" -ForegroundColor Red
+    
+    $choice = Read-Host "`nWählen Sie (1-3)"
+    
+    switch ($choice) {
+        "1" {
+            Write-Host "`n✅ Nutze bestehenden Server auf http://localhost:5000" -ForegroundColor Green
+            Write-Host "🌐 Öffne Browser..." -ForegroundColor Cyan
+            Start-Process "http://localhost:5000"
+            exit 0
+        }
+        "2" {
+            Write-Host "`n🛑 Stoppe alle Server..." -ForegroundColor Yellow
+            $existingProcesses | Stop-Process -Force
+            Start-Sleep -Seconds 2
+            Write-Host "✅ Server gestoppt!" -ForegroundColor Green
+        }
+        "3" {
+            Write-Host "`n👋 Abgebrochen" -ForegroundColor Gray
+            exit 0
+        }
+        default {
+            Write-Host "`n❌ Ungültige Auswahl" -ForegroundColor Red
+            exit 1
+        }
+    }
 }
-catch {
-    Write-Host "✗ Python nicht gefunden!" -ForegroundColor Red
-    Write-Host "Bitte installieren Sie Python 3.9+ von python.org" -ForegroundColor Red
+
+# 2. Prüfe Konfiguration
+Write-Host "`n📝 Prüfe Konfiguration..." -ForegroundColor Yellow
+$rootKey = (Get-Content .env | Select-String "^API_KEY=").ToString().Split("=")[1]
+$serverKey = (Get-Content server\.env | Select-String "^NCA_API_KEY=").ToString().Split("=")[1]
+
+if ($rootKey -ne $serverKey) {
+    Write-Host "⚠️  API-Keys stimmen nicht überein!" -ForegroundColor Red
+    Write-Host "Root: $rootKey" -ForegroundColor Yellow
+    Write-Host "Server: $serverKey" -ForegroundColor Yellow
+    Write-Host "`n🔧 Fixe API-Keys..." -ForegroundColor Cyan
+    
+    $serverEnv = Get-Content server\.env
+    $serverEnv = $serverEnv -replace "NCA_API_KEY=.*", "NCA_API_KEY=$rootKey"
+    $serverEnv | Set-Content server\.env
+    
+    Write-Host "✅ API-Keys synchronisiert!" -ForegroundColor Green
+}
+
+Write-Host "✅ Konfiguration OK!" -ForegroundColor Green
+Write-Host "  API-Key: $rootKey" -ForegroundColor Cyan
+
+# 3. Starte Server
+Write-Host "`n🚀 Starte Server..." -ForegroundColor Yellow
+Write-Host "  Port: 5000" -ForegroundColor Cyan
+Write-Host "  NCA Toolkit: http://localhost:8080" -ForegroundColor Cyan
+
+cd server
+
+# Starte in neuem Fenster (damit er im Hintergrund läuft)
+Start-Process powershell -ArgumentList "-NoExit", "-Command", ".\venv\Scripts\python.exe app.py" -WindowStyle Normal
+
+# Warte bis Server bereit ist
+Write-Host "`n⏳ Warte auf Server..." -ForegroundColor Yellow
+$maxAttempts = 10
+$attempt = 0
+
+while ($attempt -lt $maxAttempts) {
+    Start-Sleep -Seconds 1
+    try {
+        $health = Invoke-RestMethod -Uri "http://localhost:5000/api/health" -TimeoutSec 2 -ErrorAction Stop
+        Write-Host "✅ Server läuft!" -ForegroundColor Green
+        break
+    }
+    catch {
+        $attempt++
+        Write-Host "." -NoNewline -ForegroundColor Gray
+    }
+}
+
+if ($attempt -ge $maxAttempts) {
+    Write-Host "`n❌ Server startet nicht!" -ForegroundColor Red
+    Write-Host "Prüfen Sie das Server-Fenster für Fehler." -ForegroundColor Yellow
     exit 1
 }
 
-# 2. Erstelle virtuelles Environment
-Write-Host ""
-Write-Host "[2/5] Erstelle virtuelles Environment..." -ForegroundColor Yellow
-if (Test-Path "venv") {
-    Write-Host "✓ venv existiert bereits" -ForegroundColor Green
-}
-else {
-    python -m venv venv
-    Write-Host "✓ venv erstellt" -ForegroundColor Green
-}
+# 4. Öffne Browser
+Write-Host "`n🌐 Öffne Browser..." -ForegroundColor Cyan
+Start-Process "http://localhost:5000"
 
-# 3. Aktiviere Environment
-Write-Host ""
-Write-Host "[3/5] Aktiviere Environment..." -ForegroundColor Yellow
-& ".\venv\Scripts\Activate.ps1"
-Write-Host "✓ Environment aktiviert" -ForegroundColor Green
+Write-Host "`n╔════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║  ✅ SERVER LÄUFT!                      ║" -ForegroundColor Green
+Write-Host "╚════════════════════════════════════════╝" -ForegroundColor Green
 
-# 4. Installiere Dependencies
-Write-Host ""
-Write-Host "[4/5] Installiere Dependencies..." -ForegroundColor Yellow
-pip install -q -r requirements.txt
-Write-Host "✓ Dependencies installiert" -ForegroundColor Green
-
-# 5. Erstelle .env falls nicht vorhanden
-Write-Host ""
-Write-Host "[5/5] Prüfe Konfiguration..." -ForegroundColor Yellow
-if (-not (Test-Path ".env")) {
-    Copy-Item ".env.example" ".env"
-    Write-Host "✓ .env erstellt (bitte API-Key anpassen!)" -ForegroundColor Yellow
-}
-else {
-    Write-Host "✓ .env vorhanden" -ForegroundColor Green
-}
-
-# Fertig!
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
-Write-Host "  Setup abgeschlossen!" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Green
-Write-Host ""
-Write-Host "Server starten mit:" -ForegroundColor Cyan
-Write-Host "  python app.py" -ForegroundColor White
-Write-Host ""
-Write-Host "Oder direkt starten:" -ForegroundColor Cyan
-Write-Host ""
-
-# Starte Server
-Write-Host "Server wird gestartet..." -ForegroundColor Yellow
-Write-Host ""
-python app.py
+Write-Host "`n📋 Nützliche Befehle:" -ForegroundColor Yellow
+Write-Host "  • Server stoppen: Schließen Sie das Server-Fenster" -ForegroundColor Cyan
+Write-Host "  • Logs ansehen: Schauen Sie ins Server-Fenster" -ForegroundColor Cyan
+Write-Host "  • Browser öffnen: http://localhost:5000" -ForegroundColor Cyan
+Write-Host "  • Neu starten: Führen Sie dieses Script erneut aus`n" -ForegroundColor Cyan

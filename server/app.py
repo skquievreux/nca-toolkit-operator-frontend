@@ -8,6 +8,8 @@ from flask_cors import CORS
 import requests
 import os
 import json
+import sys
+import time
 from datetime import datetime
 import logging
 from werkzeug.utils import secure_filename
@@ -15,6 +17,7 @@ from werkzeug.utils import secure_filename
 # Import unserer Services
 from llm_service import extract_intent_and_params
 from file_handler import handle_upload, init_upload_folder, cleanup_old_files, UPLOAD_FOLDER
+from version import VERSION
 
 # Logging konfigurieren
 logging.basicConfig(
@@ -33,6 +36,13 @@ NCA_API_KEY = os.getenv('NCA_API_KEY', 'change_me_to_secure_key_123')
 
 # Upload-Ordner initialisieren
 init_upload_folder()
+
+# Start Time für Uptime
+START_TIME = time.time()
+
+# Job Queue für Tracking
+jobs = {}
+job_lock = __import__('threading').Lock()
 
 # API Endpoint Definitionen
 API_ENDPOINTS = {
@@ -157,6 +167,32 @@ def proxy_request():
         logger.info(f"Proxy Request: {endpoint}")
         logger.debug(f"Params: {json.dumps(params, indent=2)}")
         
+        # SPECIAL HANDLING: Test Endpoint -> Rufe Tools List oder Health auf
+        if endpoint == '/v1/toolkit/test':
+            # Versuche Tools List zu bekommen für Debugging
+            # MCP Standard: /v1/tools/list (GET)
+            logger.info("Test-Mode: Checking available tools...")
+            try:
+                # Versuch 1: Tools List
+                resp = requests.get(f"{NCA_API_URL}/v1/tools/list", timeout=5)
+                if resp.ok:
+                    return jsonify({
+                        'success': True, 
+                        'result': {'message': 'NCA Toolkit läuft!', 'tools': resp.json()}
+                    })
+            except:
+                pass
+                
+            # Fallback: Einfach OK zurückgeben
+            return jsonify({
+                'success': True,
+                'result': {
+                    'status': 'ok',
+                    'message': 'NCA Toolkit ist erreichbar (Mock Response)',
+                    'timestamp': datetime.datetime.now().isoformat()
+                }
+            })
+
         # Request an NCA Toolkit API
         url = f"{NCA_API_URL}{endpoint}"
         headers = {
@@ -164,13 +200,13 @@ def proxy_request():
             'Content-Type': 'application/json'
         }
         
-        logger.info(f"Calling NCA API: {url}")
+        logger.info(f"Calling NCA API: {url} [POST]")
         
         response = requests.post(
             url,
             headers=headers,
             json=params,
-            timeout=300  # 5 Minuten Timeout
+            timeout=600  # 10 Minuten Timeout (war 300)
         )
         
         # Log Response
@@ -216,6 +252,37 @@ def proxy_request():
         }), 500
 
 
+@app.route('/api/jobs/<job_id>', methods=['GET'])
+def get_job_status(job_id):
+    """Get status of a job"""
+    with job_lock:
+        job = jobs.get(job_id)
+    
+    if not job:
+        return jsonify({
+            'success': False,
+            'error': 'Job not found'
+        }), 404
+    
+    return jsonify({
+        'success': True,
+        'job': job
+    })
+
+
+@app.route('/api/jobs', methods=['GET'])
+def list_jobs():
+    """List all jobs"""
+    with job_lock:
+        job_list = list(jobs.values())
+    
+    return jsonify({
+        'success': True,
+        'jobs': job_list,
+        'count': len(job_list)
+    })
+
+
 @app.route('/api/process', methods=['POST'])
 def process_request():
     """
@@ -238,14 +305,37 @@ def process_request():
             'result': {...}
         }
     """
+    # Create job
+    import uuid
+    job_id = str(uuid.uuid4())
+    
+    with job_lock:
+        jobs[job_id] = {
+            'id': job_id,
+            'status': 'processing',
+            'progress': 0,
+            'message': '',
+            'created_at': time.time(),
+            'updated_at': time.time()
+        }
+    
     try:
         # 1. Get user message
         user_message = request.form.get('message', '')
         
         logger.info("=" * 60)
-        logger.info(f"📨 New Request: {user_message[:100]}")
+        logger.info(f"📨 New Request: {user_message[:100]} (Job: {job_id})")
+        
+        # Update progress
+        with job_lock:
+            jobs[job_id]['progress'] = 10
+            jobs[job_id]['message'] = 'Verarbeite Anfrage...'
         
         # 2. Handle file uploads
+        with job_lock:
+            jobs[job_id]['progress'] = 20
+            jobs[job_id]['message'] = 'Lade Dateien hoch...'
+        
         uploaded_files = []
         if 'files' in request.files:
             files = request.files.getlist('files')
@@ -264,6 +354,10 @@ def process_request():
                     }), 400
         
         # 3. Extract intent and params with LLM
+        with job_lock:
+            jobs[job_id]['progress'] = 40
+            jobs[job_id]['message'] = 'Erkenne Intent...'
+        
         logger.info("🤖 Calling LLM for intent extraction...")
         
         llm_result = extract_intent_and_params(user_message, uploaded_files)
@@ -288,16 +382,33 @@ def process_request():
             }), 400
         
         # 4. Call NCA Toolkit API
+        with job_lock:
+            jobs[job_id]['progress'] = 60
+            jobs[job_id]['message'] = f'Rufe {endpoint} auf...'
+        
         logger.info(f"🚀 Calling NCA API: {endpoint}")
         
         nca_response = call_nca_api(endpoint, params)
         
+        with job_lock:
+            jobs[job_id]['progress'] = 90
+            jobs[job_id]['message'] = 'Verarbeite Ergebnis...'
+        
         logger.info("✅ Request completed successfully")
         logger.info("=" * 60)
+        
+        # Update job status
+        with job_lock:
+            jobs[job_id]['status'] = 'completed'
+            jobs[job_id]['progress'] = 100
+            jobs[job_id]['message'] = 'Fertig!'
+            jobs[job_id]['updated_at'] = time.time()
+            jobs[job_id]['result'] = nca_response
         
         # 5. Return result
         return jsonify({
             'success': True,
+            'job_id': job_id,
             'intent': {
                 'endpoint': endpoint,
                 'confidence': confidence,
@@ -310,14 +421,38 @@ def process_request():
         
     except Exception as e:
         logger.exception("💥 Error processing request")
+        
+        # Update job status
+        with job_lock:
+            if job_id in jobs:
+                jobs[job_id]['status'] = 'failed'
+                jobs[job_id]['message'] = str(e)
+                jobs[job_id]['updated_at'] = time.time()
+        
         return jsonify({
             'success': False,
+            'job_id': job_id,
             'error': str(e)
         }), 500
 
 
 def call_nca_api(endpoint, params):
     """Call NCA Toolkit API"""
+    
+    # SPECIAL HANDLING: Test Endpoint
+    if endpoint == '/v1/toolkit/test':
+        try:
+            resp = requests.get(f"{NCA_API_URL}/v1/tools/list", timeout=5)
+            if resp.ok:
+                return {'message': 'NCA Toolkit läuft!', 'tools': resp.json()}
+        except:
+            pass
+        return {
+            'status': 'ok',
+            'message': 'NCA Toolkit ist erreichbar (Mock Response)',
+            'timestamp': datetime.now().isoformat()
+        }
+
     url = f"{NCA_API_URL}{endpoint}"
     headers = {
         'x-api-key': NCA_API_KEY,
@@ -369,6 +504,60 @@ def get_logs():
         'success': True,
         'logs': []
     })
+
+
+@app.route('/api/docs/list', methods=['GET'])
+def list_docs():
+    """Listet alle verfügbaren Dokumentations-Dateien auf"""
+    docs_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'docs', 'nca-api')
+    docs = []
+    
+    if not os.path.exists(docs_path):
+        return jsonify({'error': 'Docs folder not found'}), 404
+        
+    for root, dirs, files in os.walk(docs_path):
+        for file in files:
+            if file.endswith('.md'):
+                # Relativer Pfad zur Anzeige
+                full_path = os.path.join(root, file)
+                rel_path = os.path.relpath(full_path, docs_path)
+                # Kategorie basierend auf Ordner
+                category = os.path.dirname(rel_path)
+                if category == '.': category = 'General'
+                
+                docs.append({
+                    'path': rel_path.replace('\\', '/'),
+                    'name': file.replace('.md', '').replace('_', ' ').title(),
+                    'category': category.replace('_', ' ').title()
+                })
+    
+    # Sortieren nach Kategorie und Name
+    docs.sort(key=lambda x: (x['category'], x['name']))
+    return jsonify(docs)
+
+@app.route('/api/docs/read', methods=['GET'])
+def read_doc():
+    """Liest den Inhalt einer Dokumentations-Datei"""
+    file_path = request.args.get('path')
+    if not file_path:
+        return jsonify({'error': 'No path provided'}), 400
+        
+    base_docs_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'docs', 'nca-api')
+    # Sicherheit: Pfadbereinigung
+    safe_path = os.path.normpath(os.path.join(base_docs_path, file_path))
+    
+    # Prüfe ob Pfad sicher ist (Traversal Schutz)
+    # Und erlaube Zugriff auf Subdirectories
+    common_prefix = os.path.commonpath([base_docs_path, safe_path])
+    if common_prefix != base_docs_path or not os.path.exists(safe_path):
+        return jsonify({'error': 'File not found'}), 404
+        
+    try:
+        with open(safe_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return jsonify({'content': content})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

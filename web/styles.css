@@ -66,6 +66,11 @@ body {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    transition: opacity 0.2s;
+}
+
+.logo:hover {
+    opacity: 0.8;
 }
 
 .logo-icon {
@@ -716,6 +721,7 @@ body {
     from {
         opacity: 0;
     }
+
     to {
         opacity: 1;
     }
@@ -726,6 +732,7 @@ body {
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -737,6 +744,7 @@ body {
         transform: translateY(20px);
         opacity: 0;
     }
+
     to {
         transform: translateY(0);
         opacity: 1;
@@ -744,9 +752,12 @@ body {
 }
 
 @keyframes pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
     }
+
     50% {
         transform: scale(1.05);
     }
@@ -756,6 +767,123 @@ body {
     to {
         transform: rotate(360deg);
     }
+}
+
+/* ===== Drag & Drop Zone ===== */
+.chat-container.drag-over {
+    background: rgba(99, 102, 241, 0.05);
+    border: 2px dashed var(--primary);
+    border-radius: 16px;
+}
+
+.chat-container.drag-over::after {
+    content: '📁 Dateien hier ablegen';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--primary);
+    background: var(--bg-secondary);
+    padding: 2rem 3rem;
+    border-radius: 16px;
+    border: 2px dashed var(--primary);
+    pointer-events: none;
+}
+
+/* ===== Log Entries ===== */
+.log-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+    border-left: 3px solid transparent;
+}
+
+.log-entry.log-info {
+    background: rgba(99, 102, 241, 0.05);
+    border-left-color: var(--primary);
+}
+
+.log-entry.log-success {
+    background: rgba(16, 185, 129, 0.05);
+    border-left-color: var(--success);
+}
+
+.log-entry.log-error {
+    background: rgba(239, 68, 68, 0.05);
+    border-left-color: var(--error);
+}
+
+.log-entry.log-warning {
+    background: rgba(245, 158, 11, 0.05);
+    border-left-color: var(--warning);
+}
+
+.log-time {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    min-width: 60px;
+}
+
+.log-icon {
+    font-size: 1rem;
+}
+
+.log-message {
+    flex: 1;
+    color: var(--text-secondary);
+}
+
+/* ===== Icon Button (for logs button) ===== */
+.icon-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.icon-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.icon-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* ===== Modal Close Button ===== */
+.modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1.5rem;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 /* ===== Responsive ===== */
@@ -784,3 +912,67 @@ body {
         font-size: 1.5rem;
     }
 }
+/* Docs API Styles */
+.modal-large {
+    max-width: 1200px;
+    width: 90vw;
+    height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.docs-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    padding: 0 !important;
+}
+
+.docs-sidebar {
+    width: 280px;
+    background: rgba(0, 0, 0, 0.2);
+    border-right: 1px solid var(--border-color);
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.docs-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 2rem;
+    background: var(--bg-secondary);
+    line-height: 1.6;
+}
+
+.doc-item {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: var(--text-color);
+    text-decoration: none;
+    border-radius: 0.5rem;
+    margin-bottom: 0.25rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.doc-item:hover, .doc-item.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.doc-category {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin: 1.5rem 0 0.5rem 0.5rem;
+    font-weight: 600;
+}
+
+/* Markdown Styles */
+#docsContent h1 { font-size: 2rem; margin-bottom: 1.5rem; color: var(--primary-light); }
+#docsContent h2 { font-size: 1.5rem; margin-top: 2rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+#docsContent code { background: rgba(0,0,0,0.3); padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
+#docsContent pre { background: #1e1e1e; padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 1rem 0; }
+#docsContent pre code { background: transparent; padding: 0; }
+

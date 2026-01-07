@@ -167,6 +167,10 @@ def extract_intent_and_params(user_message, uploaded_files=None):
         return fallback_extraction(user_message, uploaded_files)
 
 
+import time
+
+# ... (restliche imports bleiben gleich, ich ersetze nur den oberen teil und die fallback funktion)
+
 def fallback_extraction(user_message, uploaded_files=None):
     """
     Fallback wenn LLM nicht verfügbar ist
@@ -179,37 +183,81 @@ def fallback_extraction(user_message, uploaded_files=None):
     # Extract URLs
     urls = re.findall(r'https?://[^\s]+', user_message)
     
+    # Test Endpoint (HÖCHSTE PRIORITÄT!)
+    if any(kw in message_lower for kw in ['test', 'teste', 'check', 'prüf']):
+        return {
+            'endpoint': '/v1/toolkit/test',
+            'params': {},
+            'confidence': 0.9,
+            'reasoning': 'Fallback: Test-Endpunkt erkannt'
+        }
+    
+    # Thumbnail (Video)
+    if any(kw in message_lower for kw in ['thumbnail', 'vorschaubild', 'cover']):
+        video_url = None
+        if uploaded_files:
+            video_url = uploaded_files[0]['url']
+        elif urls:
+            video_url = urls[0]
+            
+        return {
+            'endpoint': '/v1/video/thumbnail',
+            'params': {'url': video_url or ''},
+            'confidence': 0.8,
+            'reasoning': 'Fallback: Keyword-Matching für Thumbnail'
+        }
+
     # Video + Audio zusammenfügen
-    if any(kw in message_lower for kw in ['zusammen', 'füge', 'merge', 'combine', 'audio.*video', 'video.*audio']):
+    if any(kw in message_lower for kw in ['zusammen', 'füge', 'merge', 'combine']) and \
+       (any(kw in message_lower for kw in ['audio', 'ton', 'mp3']) and any(kw in message_lower for kw in ['video', 'film', 'mp4'])):
+        
         video_url = None
         audio_url = None
         
         if uploaded_files and len(uploaded_files) >= 2:
-            # Erste Datei = Video, Zweite = Audio
-            video_files = [f for f in uploaded_files if f['type'] in ['mp4', 'avi', 'mov', 'mkv']]
-            audio_files = [f for f in uploaded_files if f['type'] in ['mp3', 'wav', 'aac', 'm4a']]
+            # Versuch intelligent zu guessen anhand extension
+            for f in uploaded_files:
+                ext = f.get('filename', '').lower().split('.')[-1]
+                if ext in ['mp4', 'mov', 'avi', 'mkv'] and not video_url:
+                    video_url = f['url']
+                elif ext in ['mp3', 'wav', 'aac', 'm4a'] and not audio_url:
+                    audio_url = f['url']
             
-            if video_files:
-                video_url = video_files[0]['url']
-            if audio_files:
-                audio_url = audio_files[0]['url']
+            # Fallback wenn extensions nicht klar
+            if not video_url and len(uploaded_files) > 0: video_url = uploaded_files[0]['url']
+            if not audio_url and len(uploaded_files) > 1: audio_url = uploaded_files[1]['url']
         
         elif urls and len(urls) >= 2:
             video_url = urls[0]
             audio_url = urls[1]
         
         return {
-            'endpoint': '/v1/video/add/audio',
+            'endpoint': '/v1/ffmpeg/compose',
             'params': {
-                'video_url': video_url or '',
-                'audio_url': audio_url or ''
+                'inputs': [
+                    {'file_url': video_url},
+                    {'file_url': audio_url}
+                ],
+                'outputs': [
+                    {
+                        'options': [
+                            {'option': '-c:v', 'argument': 'copy'},
+                            {'option': '-c:a', 'argument': 'aac'},
+                            {'option': '-map', 'argument': '0:v:0'},
+                            {'option': '-map', 'argument': '1:a:0'},
+                            {'option': '-shortest', 'argument': None}
+                        ]
+                    }
+                ],
+                'global_options': [{'option': '-y'}],
+                'id': f"merge-{int(time.time())}"
             },
-            'confidence': 0.7,
-            'reasoning': 'Fallback: Keyword-Matching für Video+Audio'
+            'confidence': 0.8,
+            'reasoning': 'Fallback: Video+Audio Merge via FFmpeg Compose'
         }
     
     # Transkription
-    elif any(kw in message_lower for kw in ['transkript', 'transcribe', 'untertitel', 'text']):
+    elif any(kw in message_lower for kw in ['transkript', 'transcrib', 'untertitel', 'text', 'transkrib']):
         media_url = None
         
         if uploaded_files:
@@ -217,7 +265,7 @@ def fallback_extraction(user_message, uploaded_files=None):
         elif urls:
             media_url = urls[0]
         
-        language = 'de' if any(kw in message_lower for kw in ['deutsch', 'german']) else 'de'
+        language = 'de'
         if any(kw in message_lower for kw in ['englisch', 'english']):
             language = 'en'
         
@@ -225,52 +273,42 @@ def fallback_extraction(user_message, uploaded_files=None):
             'endpoint': '/v1/media/transcribe',
             'params': {
                 'media_url': media_url or '',
-                'language': language
+                'language': language,
+                # Parameteranpassung laut Doku v1/media/transcribe
+                'task': 'transcribe',
+                'include_text': True,
+                'include_srt': True,
+                'response_type': 'cloud'
             },
-            'confidence': 0.7,
+            'confidence': 0.8,
             'reasoning': 'Fallback: Keyword-Matching für Transkription'
         }
     
     # Screenshot
     elif any(kw in message_lower for kw in ['screenshot', 'capture', 'bild']):
         url = urls[0] if urls else ''
-        
         return {
             'endpoint': '/v1/image/screenshot/webpage',
             'params': {
-                'url': url,
+                'url': url or 'https://google.com',
                 'viewport_width': 1920,
                 'viewport_height': 1080
             },
-            'confidence': 0.7,
+            'confidence': 0.8,
             'reasoning': 'Fallback: Keyword-Matching für Screenshot'
         }
     
     # MP3 Konvertierung
     elif any(kw in message_lower for kw in ['mp3', 'audio', 'konvertier']):
         media_url = None
-        
-        if uploaded_files:
-            media_url = uploaded_files[0]['url']
-        elif urls:
-            media_url = urls[0]
+        if uploaded_files: media_url = uploaded_files[0]['url']
+        elif urls: media_url = urls[0]
         
         return {
             'endpoint': '/v1/media/convert/mp3',
-            'params': {
-                'media_url': media_url or ''
-            },
-            'confidence': 0.6,
+            'params': {'url': media_url or ''},
+            'confidence': 0.8,
             'reasoning': 'Fallback: Keyword-Matching für MP3-Konvertierung'
-        }
-    
-    # Test
-    elif any(kw in message_lower for kw in ['test', 'teste']):
-        return {
-            'endpoint': '/v1/toolkit/test',
-            'params': {},
-            'confidence': 0.9,
-            'reasoning': 'Fallback: Test-Endpunkt erkannt'
         }
     
     # Unbekannt

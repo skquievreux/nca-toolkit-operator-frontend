@@ -140,6 +140,13 @@ docker-compose down
 docker-compose up -d
 ```
 
+### Updates installieren
+
+Nutzen Sie das automatisierte Update-Skript:
+```powershell
+.\update-system.ps1
+```
+
 ---
 
 ## 📚 Verfügbare Funktionen
@@ -293,4 +300,4 @@ Sie haben jetzt:
 
 **Erstellt am**: 2026-01-06  
 **Version**: 1.0.0  
-**Docker Image**: `stephengpope/no-code-architects-toolkit@sha256:19191d643515...`
+**Docker Image**: `stephengpope/no-code-architects-toolkit:latest`

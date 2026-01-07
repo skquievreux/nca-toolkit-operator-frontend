@@ -1,6 +1,6 @@
 services:
   nca-toolkit:
-    image: stephengpope/no-code-architects-toolkit@sha256:19191d643515d62e8f063cf8a4d93b56887363de41514e80e25a6a1d0ca04d22
+    image: stephengpope/no-code-architects-toolkit:latest
     container_name: nca-toolkit-mcp
     ports:
       - "${HOST_PORT:-8080}:${CONTAINER_PORT:-8080}"
@@ -20,15 +20,15 @@ services:
       # - GCP_BUCKET_NAME=${GCP_BUCKET_NAME}
 
       # Local Storage
-      - LOCAL_STORAGE_PATH=${LOCAL_STORAGE_PATH:-/tmp}
+      - LOCAL_STORAGE_PATH=/app/data
 
       # Performance Tuning
       - MAX_QUEUE_LENGTH=${MAX_QUEUE_LENGTH:-10}
       - GUNICORN_WORKERS=${GUNICORN_WORKERS:-4}
       - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-300}
     volumes:
-      # Mount local directory for persistent storage (optional)
-      - ./data:/tmp
+      # Mount local directory for persistent storage
+      - ./data:/app/data
     restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:8080/ || exit 1" ]

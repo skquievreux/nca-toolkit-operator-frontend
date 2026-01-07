@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 Cache Fix - NCA Toolkit</title>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a;
+            color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status {
+            background: #334155;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .success {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+            border: 1px solid #10b981;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            border: 1px solid #ef4444;
+        }
+
+        button {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #4f46e5;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #334155;
+        }
+
+        .btn-secondary:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🔧 Cache Fix</h1>
+        <p>Dieser Fix behebt das Problem mit der falschen Backend-URL.</p>
+
+        <div class="status" id="status">
+            Aktuelle URL: <span id="currentUrl">Wird geladen...</span>
+        </div>
+
+        <button onclick="fixCache()">✅ Cache Fixen</button>
+        <button onclick="clearAll()" class="btn-secondary">🗑️ Alles Löschen</button>
+        <button onclick="goToApp()" class="btn-secondary">🚀 Zur App</button>
+
+        <div id="result" style="margin-top: 1rem;"></div>
+    </div>
+
+    <script>
+        // Show current URL
+        const currentUrl = localStorage.getItem('nca_api_url') || 'http://localhost:8080 (Default)';
+        document.getElementById('currentUrl').textContent = currentUrl;
+
+        function fixCache() {
+            // Set correct URL
+            localStorage.setItem('nca_api_url', 'http://localhost:5000');
+
+            // Show success
+            const result = document.getElementById('result');
+            result.innerHTML = '<div class="status success">✅ URL wurde auf http://localhost:5000 gesetzt!</div>';
+
+            // Update display
+            document.getElementById('currentUrl').textContent = 'http://localhost:5000';
+
+            // Auto-redirect after 2 seconds
+            setTimeout(() => {
+                result.innerHTML += '<div class="status">🔄 Weiterleitung in 2 Sekunden...</div>';
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
+            }, 1000);
+        }
+
+        function clearAll() {
+            localStorage.clear();
+            const result = document.getElementById('result');
+            result.innerHTML = '<div class="status success">🗑️ Alle Daten gelöscht!</div>';
+            document.getElementById('currentUrl').textContent = 'Gelöscht';
+        }
+
+        function goToApp() {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+
+</html>

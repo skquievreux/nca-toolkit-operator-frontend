@@ -5,7 +5,8 @@
 Das **No-Code Architects Toolkit** wurde erfolgreich als MCP-Server installiert!
 
 ### Container-Info
-- **Image**: `stephengpope/no-code-architects-toolkit@sha256:19191d643515...`
+- **Image**: `stephengpope/no-code-architects-toolkit:latest`
+- **Update**: `.\update-system.ps1`
 - **Container**: `nca-toolkit-mcp`
 - **Status**: ✅ Läuft
 - **URL**: http://localhost:8080
