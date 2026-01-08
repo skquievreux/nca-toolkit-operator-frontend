@@ -12,6 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="progress-tracker.css">
+    <link rel="stylesheet" href="suggestions-panel.css">
 </head>
 
 <body>
@@ -103,6 +104,11 @@
                 </div>
 
                 <div class="messages" id="messages"></div>
+            </div>
+
+            <!-- 🆕 Smart Suggestions Panel -->
+            <div class="suggestions-panel" id="suggestionsPanel" style="display: none;">
+                <!-- Populated by JavaScript -->
             </div>
 
             <!-- Input Area -->
@@ -228,6 +234,9 @@
     <script src="version.js"></script>
     <script src="example-handler.js"></script>
     <script src="progress-tracker.js"></script>
+    <!-- 🆕 Smart Detection Features -->
+    <script src="smart-detector.js"></script>
+    <script src="one-click-workflows.js"></script>
     <script src="app.js"></script>
     <script src="progress-integration.js"></script>
 </body>

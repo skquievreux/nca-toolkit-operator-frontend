@@ -64,6 +64,11 @@ function handleDrop(e) {
     renderFileAttachments();
 
     addLogMessage(`📁 ${files.length} Datei(en) hinzugefügt`);
+
+    // 🆕 Trigger smart detection
+    if (window.oneClickWorkflows) {
+        window.oneClickWorkflows.handleFileDrop(files);
+    }
 }
 
 // ===== Logging System =====
@@ -490,6 +495,11 @@ function handleFileSelect(event) {
     state.attachedFiles.push(...files);
     renderFileAttachments();
     addLogMessage(`📁 ${files.length} Datei(en) ausgewählt`);
+
+    // 🆕 Trigger smart detection
+    if (window.oneClickWorkflows) {
+        window.oneClickWorkflows.handleFileDrop(files);
+    }
 }
 
 function removeFile(index) {
@@ -497,6 +507,15 @@ function removeFile(index) {
     state.attachedFiles.splice(index, 1);
     renderFileAttachments();
     addLogMessage(`🗑️ Datei entfernt: ${file.name}`);
+
+    // 🆕 Update suggestions panel
+    if (window.oneClickWorkflows) {
+        if (state.attachedFiles.length > 0) {
+            window.oneClickWorkflows.handleFileDrop(state.attachedFiles);
+        } else {
+            window.oneClickWorkflows.hideSuggestionsPanel();
+        }
+    }
 }
 
 function renderFileAttachments() {
@@ -727,6 +746,24 @@ if (versionInfo && typeof APP_VERSION !== 'undefined') {
 // Make functions global for onclick handlers
 window.removeFile = removeFile;
 window.showLogs = showLogs;
+
+// 🆕 Initialize Smart Detection
+let smartDetector = null;
+let oneClickWorkflows = null;
+
+if (typeof SmartFileDetector !== 'undefined' && typeof OneClickWorkflows !== 'undefined') {
+    smartDetector = new SmartFileDetector();
+    oneClickWorkflows = new OneClickWorkflows(smartDetector);
+
+    // Make globally available
+    window.smartDetector = smartDetector;
+    window.oneClickWorkflows = oneClickWorkflows;
+
+    console.log('✅ Smart Detection enabled');
+    addLogMessage(`✨ Smart Detection aktiviert!`, 'success');
+} else {
+    console.warn('⚠️ Smart Detection classes not loaded');
+}
 
 // Initialize
 setupDragAndDrop();
