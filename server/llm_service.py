@@ -11,9 +11,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Konfiguration
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+def configure_gemini():
+    api_key = os.getenv('GEMINI_API_KEY', '')
+    if api_key:
+        genai.configure(api_key=api_key)
+        logger.info("✅ Gemini API configured")
+        return True
+    logger.warning("❌ No GEMINI_API_KEY found")
+    return False
+
+# Initial configuration
+configure_gemini()
 
 # System Prompt
 SYSTEM_PROMPT = """Du bist ein API-Parameter-Extractor für das NCA Toolkit.
@@ -120,9 +128,13 @@ def extract_intent_and_params(user_message, uploaded_files=None):
         }
     """
     
-    if not GEMINI_API_KEY:
+    api_key = os.getenv('GEMINI_API_KEY', '')
+    if not api_key:
         logger.warning("Kein GEMINI_API_KEY - nutze Fallback")
         return fallback_extraction(user_message, uploaded_files)
+    
+    # Ensure genai is configured (in case it wasn't at module load)
+    configure_gemini()
     
     try:
         # Build context
@@ -158,7 +170,7 @@ Zusätzliche LOKALE Funktionen (Server-seitig verfügbar):
         
         # Call Gemini
         model = genai.GenerativeModel(
-            'gemini-2.0-flash-exp',
+            'gemini-2.0-flash',
             generation_config={
                 "response_mime_type": "application/json"
             }

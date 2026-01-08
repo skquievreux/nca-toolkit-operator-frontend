@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-py"
+  interface = "sync"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  title     String?
+  messages  Message[]
+  createdAt DateTime  @default(now())
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  role           String       // "user" or "assistant"
+  text           String
+  data           String?      // JSON blob of technical data
+  jobs           Job[]
+  createdAt      DateTime     @default(now())
+}
+
+model Job {
+  id        String   @id @default(uuid())
+  messageId String?
+  message   Message? @relation(fields: [messageId], references: [id])
+  endpoint  String
+  params    String   // JSON blob
+  result    String?  // JSON blob
+  status    String   // "pending", "completed", "failed"
+  createdAt DateTime @default(now())
+}
+
+model Asset {
+  id             String   @id @default(uuid())
+  filename       String
+  originalName   String
+  path           String
+  url            String
+  fileType       String   // "video", "audio", "image"
+  mimeType       String?
+  size           Int
+  createdAt      DateTime @default(now())
+}

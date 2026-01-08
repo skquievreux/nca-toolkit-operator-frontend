@@ -10,7 +10,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
+from file_handler import UPLOAD_FOLDER
 
 def concatenate_audio_files(audio_urls, output_filename='concatenated.mp3'):
     """

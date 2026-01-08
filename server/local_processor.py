@@ -3,6 +3,10 @@ import subprocess
 import uuid
 import logging
 from file_handler import UPLOAD_FOLDER
+from youtube_service import download_youtube_video
+from utils import get_lan_ip
+
+HOST_IP = get_lan_ip()
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +57,7 @@ def create_website_screenshot(url, width=1920, height=1080):
 
         return {
             'filename': output_filename,
-            'url': f"http://localhost:5000/uploads/{output_filename}",
+            'url': f"http://{HOST_IP}:5000/uploads/{output_filename}",
             'type': 'png',
             'size': os.path.getsize(output_path),
             'source': 'local_selenium',
@@ -113,8 +117,8 @@ def local_audio_mixing(video_url, audio_url):
         
         file_size = os.path.getsize(output_path)
         
-        # Always use localhost for browser compatibility
-        file_url = f"http://localhost:5000/uploads/{output_filename}"
+        # Always use HOST_IP for container compatibility
+        file_url = f"http://{HOST_IP}:5000/uploads/{output_filename}"
         
         return {
              'filename': output_filename,
@@ -161,7 +165,7 @@ def create_thumbnail(video_url, time_offset="00:00:01"):
             raise Exception(f"Thumbnail generation failed: {result.stderr[:200]}")
 
         file_size = os.path.getsize(output_path)
-        file_url = f"http://localhost:5000/uploads/{output_filename}"
+        file_url = f"http://{HOST_IP}:5000/uploads/{output_filename}"
 
         return {
              'filename': output_filename,
@@ -211,7 +215,7 @@ def local_audio_concat(audio_urls):
             raise Exception(f"Audio concatenation failed: {result.stderr[:200]}")
 
         file_size = os.path.getsize(output_path)
-        file_url = f"http://localhost:5000/uploads/{output_filename}"
+        file_url = f"http://{HOST_IP}:5000/uploads/{output_filename}"
 
         return {
              'filename': output_filename,
@@ -223,4 +227,57 @@ def local_audio_concat(audio_urls):
         }
     except Exception as e:
         logger.exception("Audio concatenation failed")
+        raise e
+
+def create_video_from_image_and_audio(image_url, audio_url):
+    """
+    Erstellt ein Video aus einem Standbild und einer Audiodatei.
+    Perfekt für Zusammenfassungen oder Podcasts mit Thumbnail.
+    """
+    image_path = url_to_path(image_url)
+    audio_path = url_to_path(audio_url)
+    
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Image file not found: {image_path}")
+    if not os.path.exists(audio_path):
+        raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+    output_filename = f"recap_{uuid.uuid4().hex[:8]}.mp4"
+    output_path = os.path.join(UPLOAD_FOLDER, output_filename)
+    
+    # ffmpeg -loop 1 -i image.jpg -i audio.mp3 -c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p -shortest out.mp4
+    cmd = [
+        'ffmpeg', '-y',
+        '-loop', '1',
+        '-i', image_path,
+        '-i', audio_path,
+        '-c:v', 'libx264',
+        '-tune', 'stillimage',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-pix_fmt', 'yuv420p',
+        '-shortest',
+        output_path
+    ]
+    
+    logger.info(f"🎬 Creating video from image+audio: {' '.join(cmd)}")
+    
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            logger.error(f"FFmpeg Error: {result.stderr}")
+            raise Exception(f"Video-Erstellung fehlgeschlagen: {result.stderr[:200]}")
+            
+        file_size = os.path.getsize(output_path)
+        file_url = f"http://{HOST_IP}:5000/uploads/{output_filename}"
+        
+        return {
+             'filename': output_filename,
+             'url': file_url,
+             'type': 'mp4',
+             'size': file_size,
+             'source': 'local_ffmpeg_recap'
+        }
+    except Exception as e:
+        logger.exception("Recap video creation failed")
         raise e

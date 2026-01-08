@@ -13,13 +13,21 @@ import time
 from datetime import datetime
 import logging
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+
+# Load environment variables early
+load_dotenv()
 
 # Import unserer Services
-from llm_service import extract_intent_and_params
 from file_handler import handle_upload, init_upload_folder, cleanup_old_files, UPLOAD_FOLDER
 from version import VERSION
 from utils import get_lan_ip
+import db_service
 import local_processor  # Local FFmpeg support
+
+# Import LLM/Workflow services AFTER load_dotenv
+from llm_service import extract_intent_and_params
+from workflow_engine import WorkflowEngine
 
 # Logging konfigurieren
 logging.basicConfig(
@@ -39,8 +47,14 @@ NCA_API_KEY = os.getenv('NCA_API_KEY', '343534sfklsjf343423')
 # Upload-Ordner initialisieren
 init_upload_folder()
 
+# Datenbank initialisieren
+db_service.init_db()
+
+# Workflow Engine initialisieren
+workflow_engine = WorkflowEngine(NCA_API_URL, NCA_API_KEY)
+
 # Build Number (increment on each significant change)
-BUILD_NUMBER = "2026.01.08.030"
+BUILD_NUMBER = "2026.01.08.031"
 
 # Self-Diagnosis: Check Network IP
 HOST_IP = get_lan_ip()
@@ -268,6 +282,41 @@ def proxy_request():
         }), 500
 
 
+@app.route('/api/history', methods=['GET'])
+def get_history():
+    """Gibt den Nachrichtenverlauf zurück"""
+    limit = request.args.get('limit', default=50, type=int)
+    try:
+        conversations = db_service.get_history(limit=limit)
+        
+        # Format for frontend
+        result = []
+        for conv in conversations:
+            messages = []
+            for msg in conv.messages:
+                messages.append({
+                    'role': msg.role,
+                    'text': msg.text,
+                    'data': json.loads(msg.data) if msg.data else None,
+                    'createdAt': msg.createdAt.isoformat()
+                })
+            
+            result.append({
+                'id': conv.id,
+                'title': conv.title,
+                'messages': messages,
+                'createdAt': conv.createdAt.isoformat()
+            })
+            
+        return jsonify({
+            'success': True,
+            'conversations': result
+        })
+    except Exception as e:
+        logger.error(f"Error fetching history: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/jobs/<job_id>', methods=['GET'])
 def get_job_status(job_id):
     """Get status of a job"""
@@ -297,6 +346,74 @@ def list_jobs():
         'jobs': job_list,
         'count': len(job_list)
     })
+
+
+@app.route('/api/scenarios', methods=['GET'])
+def list_scenarios():
+    """Listet alle verfügbaren Szenarien auf"""
+    return jsonify({
+        'success': True,
+        'scenarios': workflow_engine.scenarios
+    })
+
+@app.route('/api/scenarios/save', methods=['POST'])
+def save_scenarios():
+    """Speichert die Szenarien-Konfiguration"""
+    data = request.get_json()
+    if not data or 'scenarios' not in data:
+        return jsonify({'success': False, 'error': 'Daten fehlen'}), 400
+        
+    try:
+        # Update in-memory
+        workflow_engine.scenarios = data['scenarios']
+        
+        # Save to file
+        with open('scenarios.json', 'w', encoding='utf-8') as f:
+            json.dump(data['scenarios'], f, indent=2, ensure_ascii=False)
+            
+        logger.info("✅ Scenarios saved successfully")
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Error saving scenarios: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/scenarios/execute', methods=['POST'])
+def execute_scenario():
+    """Führt ein Szenario aus"""
+    data = request.get_json()
+    scenario_id = data.get('scenario_id')
+    inputs = data.get('inputs', {})
+    conversation_id = data.get('conversation_id')
+    
+    if not scenario_id:
+        return jsonify({'success': False, 'error': 'Scenario ID fehlt'}), 400
+        
+    try:
+        # Create conversation if missing
+        if not conversation_id:
+            conv = db_service.save_conversation(title=f"Workflow: {scenario_id}")
+            conversation_id = conv.id
+            
+        logger.info(f"🎬 Starting scenario: {scenario_id}")
+        
+        # Save trigger message
+        db_service.save_message(conversation_id, 'user', f"Starte Szenario: {scenario_id}", data={'inputs': inputs})
+        
+        # Execute
+        results = workflow_engine.execute_scenario(scenario_id, inputs)
+        
+        # Save result message
+        db_service.save_message(conversation_id, 'assistant', f"Szenario {scenario_id} abgeschlossen.", data={'results': results})
+        
+        return jsonify({
+            'success': True,
+            'conversation_id': conversation_id,
+            'results': results
+        })
+    except Exception as e:
+        logger.exception("Workflow execution failed")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/process', methods=['POST'])
@@ -336,8 +453,17 @@ def process_request():
         }
     
     try:
-        # 1. Get user message
+        # 1. Get user message and conversation context
         user_message = request.form.get('message', '')
+        conversation_id = request.form.get('conversation_id')
+        
+        # Create or find conversation
+        if not conversation_id:
+            conv = db_service.save_conversation(title=f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            conversation_id = conv.id
+        
+        # Save user message
+        db_message = db_service.save_message(conversation_id, 'user', user_message)
         
         logger.info("=" * 60)
         logger.info(f"📨 New Request: {user_message[:100]} (Job: {job_id})")
@@ -489,6 +615,24 @@ def process_request():
             else:
                 # Regular video concatenation - send to container
                 nca_response = call_nca_api(endpoint, params)
+        # SPECIAL CASE: Audio mixing (add audio to video)
+        elif (endpoint == '/v1/video/add/audio' or endpoint == '/audio-mixing') and params.get('video_url') and params.get('audio_url'):
+            logger.info("🎬 Detected video/audio mixing request - handling locally")
+            try:
+                from local_processor import local_audio_mixing
+                mixing_result = local_audio_mixing(params['video_url'], params['audio_url'])
+                
+                nca_response = {
+                    'success': True,
+                    'output_url': mixing_result['url'],
+                    'message': 'Video/Audio mixing completed locally',
+                    'result': mixing_result
+                }
+                logger.info(f"✅ Local mixing successful: {mixing_result['url']}")
+            except Exception as e:
+                logger.error(f"❌ Local mixing failed: {e}")
+                raise
+
         else:
             # All other endpoints - send to container
             nca_response = call_nca_api(endpoint, params)
@@ -508,10 +652,17 @@ def process_request():
             jobs[job_id]['updated_at'] = time.time()
             jobs[job_id]['result'] = nca_response
         
+        # Save assistant response
+        db_service.save_message(conversation_id, 'assistant', "Erfolg", data={
+            'intent': llm_result,
+            'result': nca_response
+        })
+
         # 5. Return result
         return jsonify({
             'success': True,
             'job_id': job_id,
+            'conversation_id': conversation_id,
             'intent': {
                 'endpoint': endpoint,
                 'confidence': confidence,

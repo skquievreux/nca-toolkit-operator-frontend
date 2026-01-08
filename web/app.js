@@ -8,7 +8,10 @@ const CONFIG = {
 const state = {
     messages: [],
     attachedFiles: [],
-    history: JSON.parse(localStorage.getItem('nca_history') || '[]'),
+    history: [], // Will be loaded from server
+    allScenarios: {},
+    currentScenarioId: null,
+    currentConversationId: localStorage.getItem('last_conversation_id') || null,
     logs: []
 };
 
@@ -25,7 +28,12 @@ const elements = {
     settingsModal: document.getElementById('settingsModal'),
     historyBtn: document.getElementById('historyBtn'),
     historyModal: document.getElementById('historyModal'),
-    historyList: document.getElementById('historyList')
+    historyList: document.getElementById('historyList'),
+    scenariosBtn: document.getElementById('scenariosBtn'),
+    scenariosModal: document.getElementById('scenariosModal'),
+    scenariosList: document.getElementById('scenariosList'),
+    editorContent: document.getElementById('editorContent'),
+    editorEmptyState: document.getElementById('editorEmptyState')
 };
 
 // ===== Drag & Drop Setup =====
@@ -175,6 +183,9 @@ async function processRequest(message, files) {
 
     const formData = new FormData();
     formData.append('message', message);
+    if (state.currentConversationId) {
+        formData.append('conversation_id', state.currentConversationId);
+    }
 
     files.forEach((file, index) => {
         formData.append('files', file);
@@ -202,6 +213,11 @@ async function processRequest(message, files) {
 
         // Log detailed response
         addLogMessage(`✅ Request erfolgreich! (${duration}s)`, 'success');
+
+        if (data.conversation_id) {
+            state.currentConversationId = data.conversation_id;
+            localStorage.setItem('last_conversation_id', data.conversation_id);
+        }
 
         if (data.job_id) {
             addLogMessage(`🆔 Job-ID: ${data.job_id}`, 'info');
@@ -570,9 +586,21 @@ function saveSettings() {
 }
 
 // ===== History =====
-function openHistory() {
+async function openHistory() {
     elements.historyModal.classList.add('active');
-    renderHistory();
+    elements.historyList.innerHTML = '<div class="loading-spinner"></div> Lade Verlauf...';
+
+    try {
+        const response = await fetch(`${CONFIG.apiUrl}/api/history`);
+        const data = await response.json();
+        if (data.success) {
+            state.history = data.conversations;
+            renderHistory();
+        }
+    } catch (error) {
+        addLogMessage(`Fehler beim Laden des Verlaufs: ${error.message}`, 'error');
+        elements.historyList.innerHTML = 'Fehler beim Laden.';
+    }
 }
 
 function closeHistory() {
@@ -587,24 +615,238 @@ function renderHistory() {
         return;
     }
 
-    state.history.forEach((entry, index) => {
+    state.history.forEach((conv) => {
         const item = document.createElement('div');
         item.className = 'history-item';
+        const date = new Date(conv.createdAt).toLocaleString('de-DE');
         item.innerHTML = `
-            <div class="history-item-time">${new Date(entry.timestamp).toLocaleString('de-DE')}</div>
-            <div class="history-item-text">${entry.message || 'N/A'}</div>
+            <div class="history-item-title">${conv.title || 'Ohne Titel'}</div>
+            <div class="history-item-time">${date} • ${conv.messages.length} Nachrichten</div>
         `;
+        item.onclick = () => loadConversation(conv.id);
         elements.historyList.appendChild(item);
     });
 }
 
-function clearHistory() {
-    if (confirm('Möchten Sie den gesamten Verlauf löschen?')) {
-        state.history = [];
-        localStorage.removeItem('nca_history');
-        renderHistory();
-        addLogMessage(`🗑️ Verlauf gelöscht`, 'info');
+async function loadConversation(id) {
+    const conv = state.history.find(c => c.id === id);
+    if (!conv) return;
+
+    state.currentConversationId = conv.id;
+    state.messages = [];
+    elements.messages.innerHTML = '';
+
+    // Hide welcome
+    const welcomeMsg = document.querySelector('.welcome-message');
+    if (welcomeMsg) welcomeMsg.style.display = 'none';
+
+    conv.messages.forEach(msg => {
+        addMessage(msg.role, msg.text, msg.data);
+    });
+
+    closeHistory();
+    addLogMessage(`Chat geladen: ${conv.title}`, 'success');
+}
+
+// ===== Scenarios =====
+async function openScenarios() {
+    elements.scenariosModal.classList.add('active');
+    loadScenarios();
+}
+
+async function loadScenarios() {
+    try {
+        const response = await fetch(`${CONFIG.apiUrl}/api/scenarios`);
+        const data = await response.json();
+        if (data.success) {
+            state.allScenarios = data.scenarios;
+            renderScenariosList();
+            renderScenarioButtons(); // Add buttons to welcome screen
+        }
+    } catch (error) {
+        addLogMessage(`Fehler beim Laden der Szenarien: ${error.message}`, 'error');
     }
+}
+
+function renderScenarioButtons() {
+    const container = document.querySelector('.example-prompts');
+    if (!container) return;
+
+    // Check if we already added the scenarios section
+    if (document.getElementById('dynamicScenarios')) return;
+
+    const section = document.createElement('div');
+    section.id = 'dynamicScenarios';
+    section.innerHTML = '<h3 style="margin-top: 1.5rem; color: var(--secondary);">🚀 Verfügbare Szenarien:</h3>';
+
+    const grid = document.createElement('div');
+    grid.style.display = 'flex';
+    grid.style.flexWrap = 'wrap';
+    grid.style.gap = '10px';
+    grid.style.marginTop = '10px';
+
+    Object.keys(state.allScenarios).forEach(id => {
+        const s = state.allScenarios[id];
+        const btn = document.createElement('button');
+        btn.className = 'example-prompt';
+        btn.style.borderColor = 'var(--secondary)';
+        btn.innerHTML = `✨ ${s.name}`;
+        btn.onclick = () => {
+            selectScenario(id);
+            openScenarios();
+        };
+        grid.appendChild(btn);
+    });
+
+    section.appendChild(grid);
+    container.appendChild(section);
+}
+
+function renderScenariosList() {
+    elements.scenariosList.innerHTML = '';
+    Object.keys(state.allScenarios).forEach(id => {
+        const s = state.allScenarios[id];
+        const item = document.createElement('div');
+        item.className = `scenario-item ${state.currentScenarioId === id ? 'active' : ''}`;
+        item.innerHTML = `
+            <h4>${s.name}</h4>
+            <p>${s.description}</p>
+        `;
+        item.onclick = () => selectScenario(id);
+        elements.scenariosList.appendChild(item);
+    });
+}
+
+function selectScenario(id) {
+    state.currentScenarioId = id;
+    renderScenariosList();
+
+    const s = state.allScenarios[id];
+    elements.editorEmptyState.style.display = 'none';
+    elements.editorContent.style.display = 'block';
+
+    document.getElementById('scenarioId').value = id;
+    document.getElementById('scenarioName').value = s.name;
+    document.getElementById('scenarioDesc').value = s.description;
+
+    // Create copy for editor (removing meta fields if they exist)
+    const config = { ...s };
+    delete config.name;
+    delete config.description;
+
+    document.getElementById('scenarioJson').value = JSON.stringify(config, null, 2);
+}
+
+document.getElementById('addScenarioBtn').onclick = () => {
+    const id = 'new_scenario_' + Math.floor(Math.random() * 1000);
+    state.allScenarios[id] = {
+        name: 'Neues Szenario',
+        description: 'Beschreibung hier...',
+        steps: []
+    };
+    selectScenario(id);
+};
+
+document.getElementById('saveScenarioBtn').onclick = async () => {
+    const id = document.getElementById('scenarioId').value;
+    const name = document.getElementById('scenarioName').value;
+    const desc = document.getElementById('scenarioDesc').value;
+    let config;
+
+    try {
+        config = JSON.parse(document.getElementById('scenarioJson').value);
+    } catch (e) {
+        alert('Invalid JSON!');
+        return;
+    }
+
+    state.allScenarios[id] = {
+        name: name,
+        description: desc,
+        ...config
+    };
+
+    try {
+        const response = await fetch(`${CONFIG.apiUrl}/api/scenarios/save`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scenarios: state.allScenarios })
+        });
+        if (response.ok) {
+            addLogMessage(`Szenario "${name}" gespeichert`, 'success');
+            loadScenarios();
+        }
+    } catch (error) {
+        addLogMessage(`Fehler beim Speichern: ${error.message}`, 'error');
+    }
+};
+
+document.getElementById('deleteScenarioBtn').onclick = async () => {
+    if (!confirm('Sicher?')) return;
+    delete state.allScenarios[state.currentScenarioId];
+    // Save state
+    const response = await fetch(`${CONFIG.apiUrl}/api/scenarios/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenarios: state.allScenarios })
+    });
+    if (response.ok) {
+        state.currentScenarioId = null;
+        elements.editorContent.style.display = 'none';
+        elements.editorEmptyState.style.display = 'flex';
+        loadScenarios();
+    }
+}
+
+document.getElementById('executeScenarioBtn').onclick = async () => {
+    const id = state.currentScenarioId;
+    const s = state.allScenarios[id];
+
+    // Prompt for required parameters
+    const inputs = {};
+    if (s.parameters) {
+        for (const p of s.parameters) {
+            const val = prompt(`${p.description} (${p.name}):`, p.default || '');
+            if (val === null && p.required) return;
+            inputs[p.name] = val;
+        }
+    }
+
+    elements.scenariosModal.classList.remove('active');
+
+    // Start progress
+    const processingMsg = addMessage('assistant', `🎬 Starte Szenario: ${s.name}...`);
+    const progressDiv = createProgressBar();
+    processingMsg.querySelector('.message-content').appendChild(progressDiv);
+
+    try {
+        const response = await fetch(`${CONFIG.apiUrl}/api/scenarios/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                scenario_id: id,
+                inputs: inputs,
+                conversation_id: state.currentConversationId
+            })
+        });
+        const data = await response.json();
+
+        elements.messages.removeChild(processingMsg);
+
+        if (data.success) {
+            addMessage('assistant', `✅ Szenario abgeschlossen!`, { result: data.results });
+            if (data.conversation_id) state.currentConversationId = data.conversation_id;
+        } else {
+            addMessage('assistant', `❌ Fehler: ${data.error}`, { error: data.error });
+        }
+    } catch (error) {
+        elements.messages.removeChild(processingMsg);
+        addMessage('assistant', `❌ Fehler: ${error.message}`, { error: error.message });
+    }
+};
+
+function closeScenarios() {
+    elements.scenariosModal.classList.remove('active');
 }
 
 // ===== Event Listeners =====
@@ -634,7 +876,9 @@ document.getElementById('saveSettings').addEventListener('click', saveSettings);
 elements.historyBtn.addEventListener('click', openHistory);
 document.getElementById('closeHistory').addEventListener('click', closeHistory);
 document.getElementById('closeHistoryBtn').addEventListener('click', closeHistory);
-document.getElementById('clearHistory').addEventListener('click', clearHistory);
+
+elements.scenariosBtn.addEventListener('click', openScenarios);
+document.getElementById('closeScenarios').addEventListener('click', closeScenarios);
 
 // Example prompts
 document.querySelectorAll('.example-prompt').forEach(btn => {
@@ -656,6 +900,9 @@ elements.settingsModal.addEventListener('click', (e) => {
 });
 elements.historyModal.addEventListener('click', (e) => {
     if (e.target === elements.historyModal) closeHistory();
+});
+elements.scenariosModal.addEventListener('click', (e) => {
+    if (e.target === elements.scenariosModal) closeScenarios();
 });
 
 // Docs Logic
@@ -767,11 +1014,32 @@ if (typeof SmartFileDetector !== 'undefined' && typeof OneClickWorkflows !== 'un
 
 // Initialize
 setupDragAndDrop();
+loadScenarios(); // Auto-load scenarios on start
+checkLastConversation(); // Auto-load last conv if exists
+
+async function checkLastConversation() {
+    if (state.currentConversationId) {
+        try {
+            const response = await fetch(`${CONFIG.apiUrl}/api/history`);
+            const data = await response.json();
+            if (data.success) {
+                state.history = data.conversations;
+                const last = data.conversations.find(c => c.id === state.currentConversationId);
+                if (last) {
+                    loadConversation(last.id);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load last conversation", e);
+        }
+    }
+}
+
 addLogMessage(`🚀 NCA Toolkit AI Assistant geladen!`, 'success');
 addLogMessage(`📡 Backend URL: ${CONFIG.apiUrl}`, 'info');
 
 console.log('🚀 NCA Toolkit AI Assistant v2.0 geladen!');
-console.log('🏗️  Build: 2026.01.08.030');
+console.log('🏗️  Build: 2026.01.08.031');
 console.log('Backend URL:', CONFIG.apiUrl);
 console.log('Drag & Drop: Aktiviert');
 console.log('Live-Logs: Aktiviert');

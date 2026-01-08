@@ -48,6 +48,12 @@
                             </path>
                         </svg>
                     </button>
+                    <button class="btn-icon" id="scenariosBtn" title="Szenarien">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                    </button>
                     <button class="btn-icon" id="historyBtn" title="Verlauf">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -176,7 +182,7 @@
         <div class="modal" id="historyModal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h2>Verlauf</h2>
+                    <h2>🕒 Verlauf</h2>
                     <button class="btn-close" id="closeHistory">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -188,8 +194,58 @@
                     <div id="historyList" class="history-list"></div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn-secondary" id="clearHistory">Verlauf löschen</button>
                     <button class="btn-primary" id="closeHistoryBtn">Schließen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scenarios Modal -->
+        <div class="modal" id="scenariosModal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>🎬 Szenarien & Automatisierung</h2>
+                    <button class="btn-close" id="closeScenarios">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body scenarios-container">
+                    <div class="scenarios-sidebar">
+                        <div id="scenariosList" class="scenarios-list"></div>
+                        <button class="btn-primary" id="addScenarioBtn" style="width: 100%; margin-top: 1rem;">+ Neues
+                            Szenario</button>
+                    </div>
+                    <div class="scenario-editor">
+                        <div id="editorEmptyState" class="empty-state">Wähle ein Szenario aus oder erstelle ein neues.
+                        </div>
+                        <div id="editorContent" style="display: none;">
+                            <div class="form-group">
+                                <label>Szenario ID</label>
+                                <input type="text" id="scenarioId" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>Anzeigename</label>
+                                <input type="text" id="scenarioName">
+                            </div>
+                            <div class="form-group">
+                                <label>Beschreibung</label>
+                                <input type="text" id="scenarioDesc">
+                            </div>
+                            <div class="form-group">
+                                <label>Konfiguration (JSON)</label>
+                                <textarea id="scenarioJson"
+                                    style="width: 100%; height: 300px; font-family: monospace;"></textarea>
+                            </div>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn-primary" id="saveScenarioBtn">Speichern</button>
+                                <button class="btn-secondary" id="executeScenarioBtn">Ausführen</button>
+                                <button class="btn-secondary" id="deleteScenarioBtn"
+                                    style="color: var(--error);">Löschen</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -1,0 +1,133 @@
+{
+    "youtube_to_script": {
+        "name": "YouTube to Audio Script",
+        "description": "Lädt ein YouTube Video, transkribiert es und erstellt ein Audioskript.",
+        "parameters": [
+            {
+                "name": "url",
+                "description": "YouTube URL",
+                "required": true
+            },
+            {
+                "name": "language",
+                "description": "Ziel-Sprache",
+                "default": "de"
+            }
+        ],
+        "steps": [
+            {
+                "id": "download",
+                "type": "local_task",
+                "function": "download_youtube_video",
+                "params": {
+                    "url": "{{url}}"
+                }
+            },
+            {
+                "id": "transcribe",
+                "type": "nca_api",
+                "endpoint": "/transcribe",
+                "params": {
+                    "media_url": "{{download.url}}"
+                }
+            },
+            {
+                "id": "summarize",
+                "type": "llm_task",
+                "prompt": "Fasse das folgende Transkript kurz zusammen und erstelle ein Audioskript für eine Sprachausgabe (ca. 30 Sekunden): {{transcribe.text}}"
+            }
+        ]
+    },
+    "voice_production": {
+        "name": "ElevenLabs Voice Production",
+        "description": "Erzeugt Sprache aus Text mit ElevenLabs.",
+        "parameters": [
+            {
+                "name": "text",
+                "description": "Zu sprechender Text",
+                "required": true
+            },
+            {
+                "name": "voice",
+                "description": "Stimme (ElevenLabs)",
+                "default": "Adam"
+            }
+        ],
+        "steps": [
+            {
+                "id": "tts",
+                "type": "voice_api",
+                "service": "elevenlabs",
+                "params": {
+                    "text": "{{text}}",
+                    "voice": "{{voice}}"
+                }
+            }
+        ]
+    },
+    "youtube_summary_video": {
+        "name": "YouTube Recap (Video)",
+        "description": "Erstellt eine Video-Zusammenfassung eines YouTube Videos mit Thumbnail und Voiceover.",
+        "parameters": [
+            {
+                "name": "url",
+                "description": "YouTube URL",
+                "required": true
+            },
+            {
+                "name": "voice",
+                "description": "ElevenLabs Stimme",
+                "default": "Adam"
+            }
+        ],
+        "steps": [
+            {
+                "id": "yt",
+                "type": "local_task",
+                "function": "download_youtube_video",
+                "params": {
+                    "url": "{{url}}"
+                }
+            },
+            {
+                "id": "transcribe",
+                "type": "nca_api",
+                "endpoint": "/transcribe",
+                "params": {
+                    "media_url": "{{yt.url}}",
+                    "language": "de"
+                }
+            },
+            {
+                "id": "write_script",
+                "type": "llm_task",
+                "prompt": "Du bist ein Content Creator. Erstelle ein kurzes, packendes Skript für eine Video-Zusammenfassung auf DEUTSCH. \nInhalt: {{transcribe.text}} \nTitel: {{yt.title}}\nHalte es unter 400 Zeichen."
+            },
+            {
+                "id": "voiceover",
+                "type": "voice_api",
+                "params": {
+                    "text": "{{write_script.text}}",
+                    "voice": "{{voice}}"
+                }
+            },
+            {
+                "id": "thumb",
+                "type": "local_task",
+                "function": "create_thumbnail",
+                "params": {
+                    "video_url": "{{yt.url}}"
+                }
+            },
+            {
+                "id": "final_video",
+                "type": "local_task",
+                "function": "create_video_from_image_and_audio",
+                "params": {
+                    "image_url": "{{thumb.url}}",
+                    "audio_url": "{{voiceover.url}}"
+                }
+            }
+        ]
+    }
+}
