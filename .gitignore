@@ -4,6 +4,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
+venv/
+ENV/
+env/
 build/
 develop-eggs/
 dist/
@@ -19,29 +22,25 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# Virtual Environment
-venv/
-ENV/
-env/
-.venv
-
-# Flask
-instance/
-.webassets-cache
-
-# Environment Variables
+# Environment
 .env
 .env.local
-.env.*.local
-server/.env
 
-# Uploads & Temporary Files
+# Logs
+logs/
+*.log
+*.log.*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Uploads
 uploads/
-temp/
-tmp/
-*.tmp
+!uploads/.gitkeep
 
 # IDE
 .vscode/
@@ -49,25 +48,18 @@ tmp/
 *.swp
 *.swo
 *~
-.DS_Store
-
-# Logs
-*.log
-logs/
-*.log.*
-
-# Docker
-.dockerignore
 
 # OS
+.DS_Store
 Thumbs.db
-desktop.ini
 
-# Project Specific
-data/
-*.zip
-*.tar.gz
+# Node modules (if any)
+node_modules/
 
-# Keep structure
-!uploads/.gitkeep
-!data/.gitkeep
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Scenarios
+scenarios.json

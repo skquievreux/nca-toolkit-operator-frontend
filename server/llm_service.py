@@ -146,7 +146,7 @@ def extract_intent_and_params(user_message, uploaded_files=None):
                 context += f"  {i}. {file['filename']} ({file['type']}, {file['size']} bytes)\n"
                 context += f"     URL: {file['url']}\n"
         
-        logger.info(f"LLM Context:\n{context}")
+        logger.debug(f"LLM Context:\n{context}")
         
         # Get dynamic system prompt with discovered endpoints
         from endpoint_discovery import get_dynamic_system_prompt
@@ -172,16 +172,39 @@ Zusätzliche LOKALE Funktionen (Server-seitig verfügbar):
         model = genai.GenerativeModel(
             'gemini-2.0-flash',
             generation_config={
-                "response_mime_type": "application/json"
+                "response_mime_type": "application/json",
+                "temperature": 0.1,  # Niedrige Temperatur für konsistentere Outputs
             }
         )
         
         response = model.generate_content(system_prompt + "\n\n" + context)
         
         # Parse response
-        result = json.loads(response.text)
+        try:
+            result = json.loads(response.text)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}")
+            logger.error(f"Raw response: {response.text[:500]}")
+            return fallback_extraction(user_message, uploaded_files)
         
-        logger.info(f"LLM Response: {json.dumps(result, indent=2)}")
+        logger.debug(f"LLM Response: {json.dumps(result, indent=2)}")
+        
+        # VALIDATION: Ensure result is a dictionary, not a list
+        if not isinstance(result, dict):
+            logger.warning(f"LLM returned invalid format (expected dict, got {type(result).__name__}). Using fallback.")
+            logger.debug(f"Invalid response: {result}")
+            return fallback_extraction(user_message, uploaded_files)
+        
+        # Ensure required fields exist
+        if 'endpoint' not in result:
+            logger.warning("LLM response missing 'endpoint' field. Using fallback.")
+            logger.debug(f"Response: {result}")
+            return fallback_extraction(user_message, uploaded_files)
+        
+        # Ensure params is a dict
+        if 'params' in result and not isinstance(result['params'], dict):
+            logger.warning(f"LLM params is not a dict (got {type(result['params']).__name__}). Fixing.")
+            result['params'] = {}
         
         # Replace placeholders with actual URLs
         if uploaded_files:
@@ -205,18 +228,28 @@ import time
 
 def fallback_extraction(user_message, uploaded_files=None):
     """
-    Fallback wenn LLM nicht verfügbar ist
-    Nutzt einfache Keyword-Matching
+    Fallback wenn LLM nicht verfügbar ist oder ungültige Antwort gibt.
+    Nutzt verbessertes Keyword-Matching mit Prioritäten.
     """
     import re
+    
+    if not user_message:
+        return {
+            'endpoint': None,
+            'params': {},
+            'confidence': 0.0,
+            'reasoning': 'Fallback: Keine Nachricht vorhanden'
+        }
     
     message_lower = user_message.lower()
     
     # Extract URLs
     urls = re.findall(r'https?://[^\s]+', user_message)
     
-    # Test Endpoint (HÖCHSTE PRIORITÄT!)
-    if any(kw in message_lower for kw in ['test', 'teste', 'check', 'prüf']):
+    # ============================================================================
+    # PRIORITY 1: Test Endpoint (HÖCHSTE PRIORITÄT!)
+    # ============================================================================
+    if any(kw in message_lower for kw in ['test', 'teste', 'check', 'prüf', 'api']):
         return {
             'endpoint': '/v1/toolkit/test',
             'params': {},
@@ -224,8 +257,31 @@ def fallback_extraction(user_message, uploaded_files=None):
             'reasoning': 'Fallback: Test-Endpunkt erkannt'
         }
     
-    # Thumbnail (Video)
-    if any(kw in message_lower for kw in ['thumbnail', 'vorschaubild', 'cover']):
+    # ============================================================================
+    # PRIORITY 2: Screenshot (Website oder Video)
+    # ============================================================================
+    if any(kw in message_lower for kw in ['screenshot', 'capture', 'bild', 'screen']):
+        url = urls[0] if urls else None
+        
+        # Wenn keine URL in Message, prüfe uploaded files
+        if not url and uploaded_files:
+            url = uploaded_files[0].get('url')
+        
+        return {
+            'endpoint': '/v1/image/screenshot/webpage',
+            'params': {
+                'url': url or 'https://google.com',
+                'viewport_width': 1920,
+                'viewport_height': 1080
+            },
+            'confidence': 0.85,
+            'reasoning': 'Fallback: Screenshot-Intent erkannt'
+        }
+    
+    # ============================================================================
+    # PRIORITY 3: Thumbnail (Video)
+    # ============================================================================
+    if any(kw in message_lower for kw in ['thumbnail', 'vorschaubild', 'cover', 'preview']):
         video_url = None
         if uploaded_files:
             video_url = uploaded_files[0]['url']
@@ -236,13 +292,17 @@ def fallback_extraction(user_message, uploaded_files=None):
             'endpoint': '/v1/video/thumbnail',
             'params': {'url': video_url or ''},
             'confidence': 0.8,
-            'reasoning': 'Fallback: Keyword-Matching für Thumbnail'
+            'reasoning': 'Fallback: Thumbnail-Intent erkannt'
         }
 
-    # Video + Audio zusammenfügen
-    if any(kw in message_lower for kw in ['zusammen', 'füge', 'merge', 'combine']) and \
-       (any(kw in message_lower for kw in ['audio', 'ton', 'mp3']) and any(kw in message_lower for kw in ['video', 'film', 'mp4'])):
-        
+    # ============================================================================
+    # PRIORITY 4: Video + Audio zusammenfügen
+    # ============================================================================
+    is_mixing = any(kw in message_lower for kw in ['zusammen', 'füge', 'merge', 'combine', 'mix'])
+    has_audio_video = (any(kw in message_lower for kw in ['audio', 'ton', 'mp3']) and 
+                       any(kw in message_lower for kw in ['video', 'film', 'mp4']))
+    
+    if is_mixing and has_audio_video:
         video_url = None
         audio_url = None
         
@@ -256,59 +316,35 @@ def fallback_extraction(user_message, uploaded_files=None):
                     audio_url = f['url']
             
             # Fallback wenn extensions nicht klar
-            if not video_url and len(uploaded_files) > 0: video_url = uploaded_files[0]['url']
-            if not audio_url and len(uploaded_files) > 1: audio_url = uploaded_files[1]['url']
+            if not video_url and len(uploaded_files) > 0: 
+                video_url = uploaded_files[0]['url']
+            if not audio_url and len(uploaded_files) > 1: 
+                audio_url = uploaded_files[1]['url']
         
         elif urls and len(urls) >= 2:
             video_url = urls[0]
             audio_url = urls[1]
-        # Helper: Get Host IP for webhook
-        def get_lan_ip():
-            import socket
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                ip = s.getsockname()[0]
-                s.close()
-                return ip
-            except:
-                return 'host.docker.internal' # Fallback
         
-        host_ip_addr = get_lan_ip()
+        if video_url and audio_url:
+            return {
+                'endpoint': '/v1/video/add/audio',
+                'params': {
+                    'video_url': video_url,
+                    'audio_url': audio_url
+                },
+                'confidence': 0.85,
+                'reasoning': 'Fallback: Video+Audio Mixing erkannt'
+            }
 
-        return {
-            'endpoint': '/audio-mixing',
-            'params': {
-                'video_url': video_url,
-                'audio_url': audio_url,
-                'video_vol': 100,
-                'audio_vol': 100,
-                'output_length': 'video',
-                'webhook_url': f"http://{host_ip_addr}:5000/api/upload"
-            },
-            'confidence': 0.9,
-            'reasoning': 'Fallback: Video+Audio Mixing (legacy endpoint checked)'
-        }
-
-    # Audio/Video Concatenation (Loop/Join)
-    if any(kw in message_lower for kw in ['hintereinander', 'loop', 'wiederhole', 'concat', 'concatenate', 'reihe']):
-        
+    # ============================================================================
+    # PRIORITY 5: Audio/Video Concatenation (Loop/Join)
+    # ============================================================================
+    if any(kw in message_lower for kw in ['hintereinander', 'loop', 'wiederhole', 'concat', 'concatenate', 'reihe', 'aneinander']):
         media_files = []
         if uploaded_files:
             media_files = [f['url'] for f in uploaded_files]
         elif urls:
             media_files = urls
-
-        if not media_files:
-             # No files uploaded and no URLs in message
-             # Check if user mentioned specific test files
-             if 'audio1' in message_lower:
-                  host_ip = get_lan_ip()
-                  media_files = [f'http://{host_ip}:5000/uploads/audio-1.mp3']
-             elif 'video1' in message_lower:
-                  host_ip = get_lan_ip()
-                  media_files = [f'http://{host_ip}:5000/uploads/video-1.mp4']
-
 
         if media_files:
             # Check for repetition
@@ -318,25 +354,25 @@ def fallback_extraction(user_message, uploaded_files=None):
             elif any(kw in message_lower for kw in ['zweimal', '2x', '2 mal', '2 times']):
                 count = 2
             
-
-
             final_files = []
             if len(media_files) == 1 and count > 1:
-                final_files = media_files * count # Repeat the same file
+                final_files = media_files * count  # Repeat the same file
             else:
-                final_files = media_files # Just join different files
+                final_files = media_files  # Just join different files
 
             return {
-                'endpoint': '/combine-videos', # Correct endpoint per container source
+                'endpoint': '/v1/video/concatenate',
                 'params': {
-                    'media_urls': final_files # Correct param name
+                    'video_urls': final_files
                 },
-                'confidence': 0.85,
-                'reasoning': f'Fallback: Concatenation of {len(final_files)} files requested'
+                'confidence': 0.8,
+                'reasoning': f'Fallback: Concatenation von {len(final_files)} Dateien'
             }
     
-    # Transkription
-    elif any(kw in message_lower for kw in ['transkript', 'transcrib', 'untertitel', 'text', 'transkrib']):
+    # ============================================================================
+    # PRIORITY 6: Transkription
+    # ============================================================================
+    if any(kw in message_lower for kw in ['transkript', 'transcrib', 'untertitel', 'text', 'transkrib', 'stt', 'speech to text']):
         media_url = None
         
         if uploaded_files:
@@ -349,55 +385,65 @@ def fallback_extraction(user_message, uploaded_files=None):
             language = 'en'
         
         return {
-            'endpoint': '/transcribe',
+            'endpoint': '/v1/media/transcribe',
             'params': {
                 'media_url': media_url or '',
-                'language': language,
-                # Parameteranpassung laut Doku v1/media/transcribe
-                'task': 'transcribe',
-                'include_text': True,
-                'include_srt': True,
-                'response_type': 'cloud'
+                'language': language
             },
             'confidence': 0.8,
-            'reasoning': 'Fallback: Keyword-Matching für Transkription'
+            'reasoning': 'Fallback: Transkriptions-Intent erkannt'
         }
     
-    # Screenshot
-    elif any(kw in message_lower for kw in ['screenshot', 'capture', 'bild']):
-        url = urls[0] if urls else ''
-        return {
-            'endpoint': '/v1/image/screenshot/webpage',
-            'params': {
-                'url': url or 'https://google.com',
-                'viewport_width': 1920,
-                'viewport_height': 1080
-            },
-            'confidence': 0.8,
-            'reasoning': 'Fallback: Keyword-Matching für Screenshot'
-        }
-    
-    # MP3 Konvertierung
-    elif any(kw in message_lower for kw in ['mp3', 'audio', 'konvertier']):
+    # ============================================================================
+    # PRIORITY 7: MP3 Konvertierung
+    # ============================================================================
+    if any(kw in message_lower for kw in ['mp3', 'konvertier', 'convert', 'audio']):
         media_url = None
-        if uploaded_files: media_url = uploaded_files[0]['url']
-        elif urls: media_url = urls[0]
+        if uploaded_files: 
+            media_url = uploaded_files[0]['url']
+        elif urls: 
+            media_url = urls[0]
         
         return {
-            'endpoint': '/media-to-mp3',
-            'params': {'url': media_url or ''},
-            'confidence': 0.8,
-            'reasoning': 'Fallback: Keyword-Matching für MP3-Konvertierung'
+            'endpoint': '/v1/media/convert/mp3',
+            'params': {'media_url': media_url or ''},
+            'confidence': 0.75,
+            'reasoning': 'Fallback: MP3-Konvertierung erkannt'
         }
     
-    # Unbekannt
-    else:
-        return {
-            'endpoint': None,
-            'params': {},
-            'confidence': 0.0,
-            'reasoning': 'Fallback: Keine passende Aktion gefunden'
-        }
+    # ============================================================================
+    # FALLBACK: Unbekannt
+    # ============================================================================
+    # Wenn wir hier ankommen, versuchen wir zu raten basierend auf uploaded files
+    if uploaded_files and len(uploaded_files) > 0:
+        first_file = uploaded_files[0]
+        ext = first_file.get('filename', '').lower().split('.')[-1]
+        
+        # Video-Datei -> Thumbnail
+        if ext in ['mp4', 'mov', 'avi', 'mkv']:
+            return {
+                'endpoint': '/v1/video/thumbnail',
+                'params': {'url': first_file['url']},
+                'confidence': 0.5,
+                'reasoning': 'Fallback: Video-Datei hochgeladen, vermute Thumbnail-Wunsch'
+            }
+        
+        # Audio-Datei -> MP3 Konvertierung
+        if ext in ['wav', 'aac', 'm4a', 'flac']:
+            return {
+                'endpoint': '/v1/media/convert/mp3',
+                'params': {'media_url': first_file['url']},
+                'confidence': 0.5,
+                'reasoning': 'Fallback: Audio-Datei hochgeladen, vermute MP3-Konvertierung'
+            }
+    
+    # Wirklich keine Ahnung
+    return {
+        'endpoint': None,
+        'params': {},
+        'confidence': 0.0,
+        'reasoning': 'Fallback: Keine passende Aktion gefunden. Bitte spezifizieren Sie Ihre Anfrage.'
+    }
 
 
 if __name__ == '__main__':

@@ -10,9 +10,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="progress-tracker.css">
-    <link rel="stylesheet" href="suggestions-panel.css">
+    <<<<<<< HEAD <link rel="stylesheet" href="styles.css">
+        <link rel="stylesheet" href="progress-tracker.css">
+        <link rel="stylesheet" href="suggestions-panel.css">
+        =======
+        <link rel="stylesheet" href="styles.css?v=16">
+        <link rel="stylesheet" href="progress-tracker.css?v=16">
+        >>>>>>> 749d5f9 (chore(sprint): finalize voice features and frontend fixes)
 </head>
 
 <body>
@@ -20,7 +24,8 @@
         <!-- Header -->
         <header class="app-header">
             <div class="header-content">
-                <a href="/" class="logo" style="text-decoration: none; color: inherit; cursor: pointer;">
+                <a href="javascript:void(0)" onclick="resetToLandingPage()" class="logo"
+                    style="text-decoration: none; color: inherit; cursor: pointer;">
                     <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -28,6 +33,11 @@
                     <h1>NCA Toolkit AI</h1>
                 </a>
                 <div class="header-actions">
+                    <button class="btn-icon" onclick="resetToLandingPage()" title="Neuer Chat">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                    </button>
                     <a href="/docs.html" class="btn-icon" title="Dokumentation">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -63,6 +73,26 @@
                 </div>
             </div>
         </header>
+
+        <!-- Job Queue Panel -->
+        <div class="job-queue-panel" id="jobQueuePanel">
+            <div class="job-queue-header">
+                <h3>
+                    Jobs
+                    <span class="job-count-badge" id="jobCountBadge">0</span>
+                </h3>
+                <button class="toggle-queue-btn" id="toggleQueueBtn" title="Job Queue ein/ausblenden">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+            </div>
+            <div class="job-queue-content" id="jobQueueContent">
+                <div id="jobList" class="job-list">
+                    <!-- Jobs will be dynamically inserted here -->
+                </div>
+            </div>
+        </div>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -287,14 +317,18 @@
     <!-- Markdown Parser -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-    <script src="version.js"></script>
-    <script src="example-handler.js"></script>
-    <script src="progress-tracker.js"></script>
+    <script src="version.js?v=16"></script>
+    <script src="result-normalizer.js?v=16"></script>
+    <script src="example-handler.js?v=16"></script>
+    <script src="progress-tracker.js?v=16"></script>
+
     <!-- 🆕 Smart Detection Features -->
-    <script src="smart-detector.js"></script>
-    <script src="one-click-workflows.js"></script>
-    <script src="app.js"></script>
-    <script src="progress-integration.js"></script>
+    <script src="smart-detector.js?v=16"></script>
+    <script src="one-click-workflows.js?v=16"></script>
+
+    <script src="app.js?v=16"></script>
+    <script src="job-queue.js?v=16"></script>
+    <script src="progress-integration.js?v=16"></script>
 </body>
 
 </html>

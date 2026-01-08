@@ -44,31 +44,74 @@ if ($existingProcesses) {
 
 # 2. Prüfe Konfiguration
 Write-Host "`n📝 Prüfe Konfiguration..." -ForegroundColor Yellow
-$rootKey = (Get-Content .env | Select-String "^API_KEY=").ToString().Split("=")[1]
-$serverKey = (Get-Content server\.env | Select-String "^NCA_API_KEY=").ToString().Split("=")[1]
 
-if ($rootKey -ne $serverKey) {
-    Write-Host "⚠️  API-Keys stimmen nicht überein!" -ForegroundColor Red
-    Write-Host "Root: $rootKey" -ForegroundColor Yellow
-    Write-Host "Server: $serverKey" -ForegroundColor Yellow
-    Write-Host "`n🔧 Fixe API-Keys..." -ForegroundColor Cyan
+# Stelle sicher, dass wir im Root-Verzeichnis sind
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $scriptDir
+
+# Prüfe ob .env Dateien existieren
+$rootEnvExists = Test-Path ".env"
+$serverEnvExists = Test-Path "server\.env"
+
+if (-not $rootEnvExists -and -not $serverEnvExists) {
+    Write-Host "⚠️  Keine .env Dateien gefunden!" -ForegroundColor Yellow
+    Write-Host "Verwende Standard-Konfiguration..." -ForegroundColor Cyan
+    $apiKey = "343534sfklsjf343423"
+}
+else {
+    # Versuche API-Key aus .env zu lesen
+    $rootKey = $null
+    $serverKey = $null
     
-    $serverEnv = Get-Content server\.env
-    $serverEnv = $serverEnv -replace "NCA_API_KEY=.*", "NCA_API_KEY=$rootKey"
-    $serverEnv | Set-Content server\.env
+    if ($rootEnvExists) {
+        $rootKeyLine = Get-Content .env | Select-String "^API_KEY=" | Select-Object -First 1
+        if ($rootKeyLine) {
+            $rootKey = $rootKeyLine.ToString().Split("=")[1].Trim()
+        }
+    }
     
-    Write-Host "✅ API-Keys synchronisiert!" -ForegroundColor Green
+    if ($serverEnvExists) {
+        $serverKeyLine = Get-Content server\.env | Select-String "^NCA_API_KEY=" | Select-Object -First 1
+        if ($serverKeyLine) {
+            $serverKey = $serverKeyLine.ToString().Split("=")[1].Trim()
+        }
+    }
+    
+    # Verwende den ersten gefundenen Key
+    $apiKey = if ($serverKey) { $serverKey } elseif ($rootKey) { $rootKey } else { "343534sfklsjf343423" }
+    
+    # Synchronisiere Keys wenn beide existieren aber unterschiedlich sind
+    if ($rootKey -and $serverKey -and $rootKey -ne $serverKey) {
+        Write-Host "⚠️  API-Keys stimmen nicht überein!" -ForegroundColor Red
+        Write-Host "Root: $rootKey" -ForegroundColor Yellow
+        Write-Host "Server: $serverKey" -ForegroundColor Yellow
+        Write-Host "`n🔧 Fixe API-Keys..." -ForegroundColor Cyan
+        
+        $serverEnv = Get-Content server\.env
+        $serverEnv = $serverEnv -replace "NCA_API_KEY=.*", "NCA_API_KEY=$rootKey"
+        $serverEnv | Set-Content server\.env
+        
+        Write-Host "✅ API-Keys synchronisiert!" -ForegroundColor Green
+        $apiKey = $rootKey
+    }
 }
 
 Write-Host "✅ Konfiguration OK!" -ForegroundColor Green
-Write-Host "  API-Key: $rootKey" -ForegroundColor Cyan
+Write-Host "  API-Key: $apiKey" -ForegroundColor Cyan
 
 # 3. Starte Server
 Write-Host "`n🚀 Starte Server..." -ForegroundColor Yellow
 Write-Host "  Port: 5000" -ForegroundColor Cyan
 Write-Host "  NCA Toolkit: http://localhost:8080" -ForegroundColor Cyan
 
-cd server
+# Stelle sicher, dass wir im server/ Verzeichnis sind
+if (-not (Test-Path "server\app.py")) {
+    Write-Host "❌ Kann server/app.py nicht finden!" -ForegroundColor Red
+    Write-Host "Aktuelles Verzeichnis: $(Get-Location)" -ForegroundColor Yellow
+    exit 1
+}
+
+Set-Location server
 
 # Starte in neuem Fenster (damit er im Hintergrund läuft)
 Start-Process powershell -ArgumentList "-NoExit", "-Command", ".\venv\Scripts\python.exe app.py" -WindowStyle Normal
@@ -81,7 +124,7 @@ $attempt = 0
 while ($attempt -lt $maxAttempts) {
     Start-Sleep -Seconds 1
     try {
-        $health = Invoke-RestMethod -Uri "http://localhost:5000/api/health" -TimeoutSec 2 -ErrorAction Stop
+        $null = Invoke-RestMethod -Uri "http://localhost:5000/api/health" -TimeoutSec 2 -ErrorAction Stop
         Write-Host "✅ Server läuft!" -ForegroundColor Green
         break
     }

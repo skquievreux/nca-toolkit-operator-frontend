@@ -10,8 +10,9 @@ import os
 import json
 import sys
 import time
-from datetime import datetime
+import datetime
 import logging
+import threading
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
@@ -28,13 +29,12 @@ import local_processor  # Local FFmpeg support
 # Import LLM/Workflow services AFTER load_dotenv
 from llm_service import extract_intent_and_params
 from workflow_engine import WorkflowEngine
+from api_helpers import safe_api_call, validate_params
 
-# Logging konfigurieren
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Logging konfigurieren (mit Rotation und konfigurierbaren Levels)
+from logging_config import setup_logging, get_logger
+setup_logging()
+logger = get_logger(__name__)
 
 # Flask App
 app = Flask(__name__, static_folder='../web', static_url_path='')
@@ -54,7 +54,7 @@ db_service.init_db()
 workflow_engine = WorkflowEngine(NCA_API_URL, NCA_API_KEY)
 
 # Build Number (increment on each significant change)
-BUILD_NUMBER = "2026.01.08.031"
+BUILD_NUMBER = "2026.01.08.042"
 
 # Self-Diagnosis: Check Network IP
 HOST_IP = get_lan_ip()
@@ -64,9 +64,8 @@ logger.info(f"🌐 Running on Host IP: {HOST_IP}")
 # Start Time für Uptime
 START_TIME = time.time()
 
-# Job Queue für Tracking
-jobs = {}
-job_lock = __import__('threading').Lock()
+# Removed legacy in-memory jobs and job_lock
+# All jobs are now persisted in SQLite via db_service
 
 # API Endpoint Definitionen
 API_ENDPOINTS = {
@@ -193,14 +192,13 @@ def proxy_request():
                 'error': 'Endpoint fehlt'
             }), 400
         
-        # Log Request
-        logger.info(f"Proxy Request: {endpoint}")
+        # Log Request (nur in Debug-Mode)
+        logger.debug(f"Proxy Request: {endpoint}")
         logger.debug(f"Params: {json.dumps(params, indent=2)}")
         
         # SPECIAL HANDLING: Test Endpoint -> Rufe Tools List oder Health auf
         if endpoint == '/v1/toolkit/test':
             # Versuche Tools List zu bekommen für Debugging
-            # MCP Standard: /v1/tools/list (GET)
             logger.info("Test-Mode: Checking available tools...")
             try:
                 # Versuch 1: Tools List
@@ -219,7 +217,7 @@ def proxy_request():
                 'result': {
                     'status': 'ok',
                     'message': 'NCA Toolkit ist erreichbar (Mock Response)',
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': datetime.datetime.now().isoformat()
                 }
             })
 
@@ -230,7 +228,7 @@ def proxy_request():
             'Content-Type': 'application/json'
         }
         
-        logger.info(f"Calling NCA API: {url} [POST]")
+        logger.debug(f"Calling NCA API: {url} [POST]")
         
         response = requests.post(
             url,
@@ -239,12 +237,12 @@ def proxy_request():
             timeout=600  # 10 Minuten Timeout (war 300)
         )
         
-        # Log Response
-        logger.info(f"Response Status: {response.status_code}")
+        # Log Response (nur Errors und Debug)
+        logger.debug(f"Response Status: {response.status_code}")
         
         if response.ok:
             result = response.json()
-            logger.info(f"Response: {json.dumps(result, indent=2)[:500]}")
+            logger.debug(f"Response: {json.dumps(result, indent=2)[:500]}")
             
             return jsonify({
                 'success': True,
@@ -317,35 +315,57 @@ def get_history():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/jobs', methods=['GET'])
+def list_jobs():
+    """Returns a list of all active/completed jobs"""
+    try:
+        # Get from DB
+        job_list = db_service.get_all_jobs(limit=100)
+        
+        # Convert objects to dicts for JSON
+        result = []
+        for job in job_list:
+            j_dict = job.model_dump() if hasattr(job, 'model_dump') else job.dict()
+            # Ensure JSON fields are parsed
+            try: j_dict['params'] = json.loads(job.params) if isinstance(job.params, str) else job.params
+            except: pass
+            try: j_dict['result'] = json.loads(job.result) if isinstance(job.result, str) else job.result
+            except: pass
+            j_dict['created_at'] = job.createdAt.timestamp() if job.createdAt else 0
+            result.append(j_dict)
+            
+        return jsonify({'success': True, 'jobs': result})
+    except Exception as e:
+        logger.error(f"Error listing jobs: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/jobs/<job_id>', methods=['GET'])
 def get_job_status(job_id):
     """Get status of a job"""
-    with job_lock:
-        job = jobs.get(job_id)
-    
-    if not job:
+    try:
+        job = db_service.get_job(job_id)
+        
+        if not job:
+            return jsonify({
+                'success': False,
+                'error': 'Job not found'
+            }), 404
+        
+        # Convert to dict
+        j_dict = job.model_dump() if hasattr(job, 'model_dump') else job.dict()
+        try: j_dict['params'] = json.loads(job.params) if isinstance(job.params, str) else job.params
+        except: pass
+        try: j_dict['result'] = json.loads(job.result) if isinstance(job.result, str) else job.result
+        except: pass
+        j_dict['created_at'] = job.createdAt.timestamp() if job.createdAt else 0
+        
         return jsonify({
-            'success': False,
-            'error': 'Job not found'
-        }), 404
-    
-    return jsonify({
-        'success': True,
-        'job': job
-    })
-
-
-@app.route('/api/jobs', methods=['GET'])
-def list_jobs():
-    """List all jobs"""
-    with job_lock:
-        job_list = list(jobs.values())
-    
-    return jsonify({
-        'success': True,
-        'jobs': job_list,
-        'count': len(job_list)
-    })
+            'success': True,
+            'job': j_dict
+        })
+    except Exception as e:
+        logger.error(f"Error getting job {job_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/scenarios', methods=['GET'])
@@ -378,9 +398,41 @@ def save_scenarios():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def process_scenario_async(job_id, scenario_id, inputs, conversation_id):
+    """Hintergrund-Thread für Szenarien"""
+    try:
+        # Update progress
+        db_service.update_job(job_id, {
+            'progress': 10,
+            'statusMessage': 'Initialisiere Szenario...'
+        })
+            
+        # Execute
+        results = workflow_engine.execute_scenario(scenario_id, inputs)
+        
+        # Save result message
+        db_service.save_message(conversation_id, 'assistant', f"Szenario {scenario_id} abgeschlossen.", data={'results': results})
+        
+        # Update job status
+        db_service.update_job(job_id, {
+            'status': 'completed',
+            'progress': 100,
+            'statusMessage': 'Szenario erfolgreich!',
+            'result': results
+        })
+            
+        logger.info(f"✅ Scenario {scenario_id} completed successfully")
+        
+    except Exception as e:
+        logger.exception(f"💥 Scenario {scenario_id} failed")
+        db_service.update_job(job_id, {
+            'status': 'failed',
+            'statusMessage': str(e)
+        })
+
 @app.route('/api/scenarios/execute', methods=['POST'])
 def execute_scenario():
-    """Führt ein Szenario aus"""
+    """Führt ein Szenario asynchron aus"""
     data = request.get_json()
     scenario_id = data.get('scenario_id')
     inputs = data.get('inputs', {})
@@ -389,303 +441,264 @@ def execute_scenario():
     if not scenario_id:
         return jsonify({'success': False, 'error': 'Scenario ID fehlt'}), 400
         
+    # Create conversation if missing
+    if not conversation_id:
+        conv = db_service.save_conversation(title=f"Workflow: {scenario_id}")
+        conversation_id = conv.id
+        
+    # Create job in DB
+    job = db_service.create_job(
+        title=f"Scenario: {scenario_id}",
+        endpoint='scenario',
+        params={'scenario_id': scenario_id, 'inputs': inputs},
+        status='processing'
+    )
+    
+    # Save trigger message
+    db_service.save_message(conversation_id, 'user', f"Starte Szenario: {scenario_id}", data={'inputs': inputs})
+    
+    # Start thread
+    thread = threading.Thread(target=process_scenario_async, args=(job.id, scenario_id, inputs, conversation_id))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'success': True,
+        'job_id': job.id,
+        'conversation_id': conversation_id
+    })
+
+
+def process_job_async(job_id, user_message, conversation_id, uploaded_files):
+    """Hintergrund-Thread für normale Requests"""
     try:
-        # Create conversation if missing
-        if not conversation_id:
-            conv = db_service.save_conversation(title=f"Workflow: {scenario_id}")
-            conversation_id = conv.id
-            
-        logger.info(f"🎬 Starting scenario: {scenario_id}")
-        
-        # Save trigger message
-        db_service.save_message(conversation_id, 'user', f"Starte Szenario: {scenario_id}", data={'inputs': inputs})
-        
-        # Execute
-        results = workflow_engine.execute_scenario(scenario_id, inputs)
-        
-        # Save result message
-        db_service.save_message(conversation_id, 'assistant', f"Szenario {scenario_id} abgeschlossen.", data={'results': results})
-        
-        return jsonify({
-            'success': True,
-            'conversation_id': conversation_id,
-            'results': results
+        # 1. Update Progress
+        db_service.update_job(job_id, {
+            'progress': 30,
+            'statusMessage': 'Erkenne Intent...',
+            'status': 'processing'
         })
-    except Exception as e:
-        logger.exception("Workflow execution failed")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/process', methods=['POST'])
-def process_request():
-    """
-    Haupt-Endpunkt: Akzeptiert Nachricht + Dateien, verarbeitet mit LLM, ruft NCA API auf
-    
-    Form Data:
-        message: User-Nachricht (string)
-        files: Hochgeladene Dateien (optional, multiple)
-    
-    Returns:
-        {
-            'success': True/False,
-            'intent': {
-                'endpoint': '/v1/...',
-                'confidence': 0.95,
-                'reasoning': '...'
-            },
-            'params': {...},
-            'uploaded_files': [...],
-            'result': {...}
-        }
-    """
-    # Create job
-    import uuid
-    job_id = str(uuid.uuid4())
-    
-    with job_lock:
-        jobs[job_id] = {
-            'id': job_id,
-            'status': 'processing',
-            'progress': 0,
-            'message': '',
-            'created_at': time.time(),
-            'updated_at': time.time()
-        }
-    
-    try:
-        # 1. Get user message and conversation context
-        user_message = request.form.get('message', '')
-        conversation_id = request.form.get('conversation_id')
         
-        # Create or find conversation
-        if not conversation_id:
-            conv = db_service.save_conversation(title=f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-            conversation_id = conv.id
-        
-        # Save user message
-        db_message = db_service.save_message(conversation_id, 'user', user_message)
-        
-        logger.info("=" * 60)
-        logger.info(f"📨 New Request: {user_message[:100]} (Job: {job_id})")
-        
-        # Update progress
-        with job_lock:
-            jobs[job_id]['progress'] = 10
-            jobs[job_id]['message'] = 'Verarbeite Anfrage...'
-        
-        # 2. Handle file uploads
-        with job_lock:
-            jobs[job_id]['progress'] = 20
-            jobs[job_id]['message'] = 'Lade Dateien hoch...'
-        
-        uploaded_files = []
-        if 'files' in request.files:
-            files = request.files.getlist('files')
-            logger.info(f"📁 Files received: {len(files)}")
-            
-            for file in files:
-                try:
-                    file_info = handle_upload(file)
-                    uploaded_files.append(file_info)
-                    logger.info(f"✅ Uploaded: {file_info['filename']} ({file_info['size_mb']}MB)")
-                except Exception as e:
-                    logger.error(f"❌ Upload failed: {e}")
-                    return jsonify({
-                        'success': False,
-                        'error': f'File upload failed: {str(e)}'
-                    }), 400
-        
-        # 3. Extract intent and params with LLM
-        with job_lock:
-            jobs[job_id]['progress'] = 40
-            jobs[job_id]['message'] = 'Erkenne Intent...'
-        
-        logger.info("🤖 Calling LLM for intent extraction...")
-        
+        logger.debug("🤖 Calling LLM for intent extraction...")
         llm_result = extract_intent_and_params(user_message, uploaded_files)
         
         endpoint = llm_result.get('endpoint')
         params = llm_result.get('params', {})
-        confidence = llm_result.get('confidence', 0.0)
-        reasoning = llm_result.get('reasoning', '')
         
-        logger.info(f"🤖 Gemini API Call: {endpoint}")
-        logger.info(f"📋 Parameters: {json.dumps(params, indent=None)}")
-        logger.info(f"💭 Reasoning: {reasoning}")
-        logger.info(f"🎯 Confidence: {confidence*100:.1f}%")
+        # VALIDATION: Check if endpoint was detected
+        if not endpoint:
+            error_msg = llm_result.get('reasoning', 'Konnte keine passende Aktion erkennen.')
+            db_service.update_job(job_id, {
+                'status': 'failed',
+                'progress': 100,
+                'statusMessage': error_msg
+            })
+            logger.warning(f"❌ No endpoint detected: {error_msg}")
+            return
         
-        # Check if intent was found
-        if not endpoint or confidence < 0.5:
-            logger.warning("⚠️ Low confidence or no intent found")
-            return jsonify({
-                'success': False,
-                'error': 'Konnte keine passende Aktion finden. Bitte formulieren Sie Ihre Anfrage anders.',
-                'intent': llm_result,
-                'uploaded_files': uploaded_files
-            }), 400
+        # Update Job Endpoint if changed
+        db_service.update_job(job_id, {'endpoint': endpoint})
         
-        # 3.5 ENDPOINT DISCOVERY: Check if we need to find alternative endpoints
-        # This is especially important for audio concatenation which might not work with /combine-videos
-        if endpoint == '/combine-videos' and params.get('media_urls'):
-            # Check if we're dealing with audio files
-            first_url = params['media_urls'][0] if params['media_urls'] else ''
-            if first_url.endswith('.mp3') or 'audio' in user_message.lower():
-                logger.info("🔍 Detected audio files, checking for audio-specific endpoint...")
-                
-                # Try to find audio concatenation endpoint
-                try:
-                    # Query available routes from container
-                    routes_response = requests.get(
-                        f"{NCA_API_URL}/",
-                        headers={'x-api-key': NCA_API_KEY},
-                        timeout=2
-                    )
-                    
-                    # If root doesn't work, we know from our investigation that audio mixing exists
-                    # Let's use /media-to-mp3 endpoint multiple times or find concat endpoint
-                    logger.info("⚠️ Audio concatenation not directly supported by /combine-videos")
-                    logger.info("💡 Fallback: Using /media-to-mp3 for each file individually")
-                    
-                    # For now, we'll keep the original endpoint but log the issue
-                    # In production, you'd implement proper audio concatenation here
-                    
-                except Exception as e:
-                    logger.warning(f"Endpoint discovery failed: {e}")
+        logger.debug(f"🧐 DEBUG: uploaded_files in thread: {uploaded_files}")
+        logger.debug(f"🧐 DEBUG: Initial params: {params}")
 
-        
-        # 4. Call NCA Toolkit API (or handle locally)
-        with job_lock:
-            jobs[job_id]['progress'] = 60
-            jobs[job_id]['message'] = f'Rufe {endpoint} auf...'
-        
-        logger.info(f"🚀 Calling NCA API: {endpoint}")
-        
-        # Check for YouTube URLs and download them automatically
+        def resolve_params(parameters, uploads):
+            if not parameters: return {}
+            resolved = {}
+            for k, v in parameters.items():
+                if isinstance(v, str) and 'USE_UPLOADED_FILE_' in v:
+                    # Clean the value
+                    clean_v = v.strip()
+                    try:
+                        # Extract index assuming format USE_UPLOADED_FILE_0
+                        parts = clean_v.split('_')
+                        if len(parts) > 0 and parts[-1].isdigit():
+                            idx = int(parts[-1])
+                            if 0 <= idx < len(uploads):
+                                resolved[k] = uploads[idx]['url']
+                                logger.debug(f"📎 Resolved param '{k}': {v} -> {resolved[k]}")
+                            else:
+                                logger.warning(f"⚠️ Index {idx} out of range for uploaded_files (len={len(uploads)})")
+                                resolved[k] = v
+                        else:
+                            resolved[k] = v
+                    except Exception as e:
+                        logger.error(f"Error resolving param {k}: {e}")
+                        resolved[k] = v
+                else:
+                    resolved[k] = v
+            return resolved
+
+        # Resolve params with uploads
+        if uploaded_files:
+            logger.debug("🔧 Resolving parameters with uploads...")
+            params = resolve_params(params, uploaded_files)
+            logger.debug(f"✅ Resolved params: {params}")
+            
+            # Update params in DB (serialize to JSON string)
+            db_service.update_job(job_id, {'params': json.dumps(params)})
+
+        # 2. Handle YouTube downloads automatically
         if params:
             from youtube_service import is_youtube_url, download_youtube_video
-            
             for key, value in params.items():
                 if isinstance(value, str) and is_youtube_url(value):
-                    logger.info(f"🎬 YouTube URL detected: {value}")
-                    logger.info(f"📥 Downloading video automatically...")
+                    db_service.update_job(job_id, {
+                        'progress': 50,
+                        'statusMessage': 'Lade YouTube-Video herunter...'
+                    })
                     
-                    with job_lock:
-                        jobs[job_id]['progress'] = 50
-                        jobs[job_id]['message'] = 'Lade YouTube-Video herunter...'
+                    download_result = download_youtube_video(value)
+                    params[key] = download_result['url']
                     
-                    try:
-                        download_result = download_youtube_video(value)
-                        logger.info(f"✅ Downloaded: {download_result['title']}")
-                        
-                        # Replace YouTube URL with downloaded file URL
-                        params[key] = download_result['url']
-                        
-                        with job_lock:
-                            jobs[job_id]['progress'] = 60
-                            jobs[job_id]['message'] = f'Video heruntergeladen: {download_result["title"]}'
-                        
-                    except Exception as e:
-                        logger.error(f"❌ YouTube download failed: {e}")
-                        raise ValueError(f"YouTube-Download fehlgeschlagen: {str(e)}")
-        
-        # SPECIAL CASE: Audio concatenation
+                    db_service.update_job(job_id, {
+                        'progress': 60,
+                        'statusMessage': f'Video heruntergeladen: {download_result["title"]}'
+                    })
+
+        # 3. Special Case: Audio Concatenation (Local Override)
+        nca_response = None
         if endpoint == '/combine-videos' and params.get('media_urls'):
             first_url = params['media_urls'][0] if params['media_urls'] else ''
             if first_url.endswith('.mp3') or first_url.endswith('.wav') or first_url.endswith('.aac'):
-                logger.info("🎵 Detected audio concatenation request - handling locally")
-                
-                try:
-                    from local_audio_service import concatenate_audio_files
-                    import uuid
-                    output_filename = f"concatenated_{uuid.uuid4().hex[:8]}.mp3"
-                    result_url = concatenate_audio_files(params['media_urls'], output_filename)
-                    
-                    nca_response = {
-                        'success': True,
-                        'output_url': result_url,
-                        'message': 'Audio concatenation completed locally',
-                        'files_concatenated': len(params['media_urls'])
-                    }
-                    
-                    logger.info(f"✅ Local audio concatenation successful: {result_url}")
-                    
-                except Exception as e:
-                    logger.error(f"❌ Local audio concatenation failed: {e}")
-                    raise
-            else:
-                # Regular video concatenation - send to container
-                nca_response = call_nca_api(endpoint, params)
-        # SPECIAL CASE: Audio mixing (add audio to video)
-        elif (endpoint == '/v1/video/add/audio' or endpoint == '/audio-mixing') and params.get('video_url') and params.get('audio_url'):
-            logger.info("🎬 Detected video/audio mixing request - handling locally")
-            try:
-                from local_processor import local_audio_mixing
-                mixing_result = local_audio_mixing(params['video_url'], params['audio_url'])
-                
+                logger.info("🎵 Handling audio concatenation locally")
+                from local_audio_service import concatenate_audio_files
+                import uuid
+                output_filename = f"concatenated_{uuid.uuid4().hex[:8]}.mp3"
+                result_url = concatenate_audio_files(params['media_urls'], output_filename)
                 nca_response = {
+                    'success': True,
+                    'output_url': result_url,
+                    'message': 'Audio concatenation completed locally',
+                    'files_concatenated': len(params['media_urls'])
+                }
+            else:
+                nca_response = call_nca_api(endpoint, params)
+        
+        # 4. Special Case: Audio Mixing (Local Override)
+        elif (endpoint == '/v1/video/add/audio' or endpoint == '/audio-mixing') and params.get('video_url') and params.get('audio_url'):
+            if local_processor.check_local_ffmpeg():
+                 logger.info("🎬 Handling video/audio mixing locally")
+                 from local_processor import local_audio_mixing
+                 mixing_result = local_audio_mixing(params['video_url'], params['audio_url'])
+                 nca_response = {
                     'success': True,
                     'output_url': mixing_result['url'],
                     'message': 'Video/Audio mixing completed locally',
                     'result': mixing_result
-                }
-                logger.info(f"✅ Local mixing successful: {mixing_result['url']}")
-            except Exception as e:
-                logger.error(f"❌ Local mixing failed: {e}")
-                raise
+                 }
 
-        else:
-            # All other endpoints - send to container
+        # 5. Regular Case: Call API
+        if not nca_response:
+            db_service.update_job(job_id, {
+                'progress': 70,
+                'statusMessage': f'Rufe {endpoint} auf...'
+            })
             nca_response = call_nca_api(endpoint, params)
         
-        with job_lock:
-            jobs[job_id]['progress'] = 90
-            jobs[job_id]['message'] = 'Verarbeite Ergebnis...'
-        
-        logger.info("✅ Request completed successfully")
-        logger.info("=" * 60)
-        
-        # Update job status
-        with job_lock:
-            jobs[job_id]['status'] = 'completed'
-            jobs[job_id]['progress'] = 100
-            jobs[job_id]['message'] = 'Fertig!'
-            jobs[job_id]['updated_at'] = time.time()
-            jobs[job_id]['result'] = nca_response
-        
+        # 6. Complete Job
+        db_service.update_job(job_id, {
+            'status': 'completed',
+            'progress': 100,
+            'statusMessage': 'Fertig!',
+            'result': nca_response
+        })
+            
         # Save assistant response
         db_service.save_message(conversation_id, 'assistant', "Erfolg", data={
             'intent': llm_result,
             'result': nca_response
         })
-
-        # 5. Return result
-        return jsonify({
-            'success': True,
-            'job_id': job_id,
-            'conversation_id': conversation_id,
-            'intent': {
-                'endpoint': endpoint,
-                'confidence': confidence,
-                'reasoning': reasoning
-            },
-            'params': params,
-            'uploaded_files': uploaded_files,
-            'result': nca_response
-        })
+        
+        logger.debug(f"✅ Job {job_id} completed successfully")
         
     except Exception as e:
-        logger.exception("💥 Error processing request")
+        logger.exception(f"💥 Job {job_id} failed")
+        db_service.update_job(job_id, {
+            'status': 'failed',
+            'statusMessage': str(e)
+        })
+
+@app.route('/api/process', methods=['POST'])
+def process_request():
+    """Haupt-Endpunkt: Asynchron"""
+    try:
+        # Support both JSON and form-data
+        if request.is_json:
+            data = request.get_json()
+            user_message = data.get('message', '')
+            conversation_id = data.get('conversation_id')
+        else:
+            user_message = request.form.get('message', '')
+            conversation_id = request.form.get('conversation_id')
         
-        # Update job status
-        with job_lock:
-            if job_id in jobs:
-                jobs[job_id]['status'] = 'failed'
-                jobs[job_id]['message'] = str(e)
-                jobs[job_id]['updated_at'] = time.time()
+        logger.debug(f"📥 Received request: message='{user_message}', conversation_id={conversation_id}")
+        logger.debug(f"📥 Request is_json: {request.is_json}")
+        
+        if not user_message:
+            return jsonify({
+                'success': False,
+                'error': 'Keine Nachricht vorhanden'
+            }), 400
+        
+        # Create or find conversation
+        if not conversation_id:
+            conv = db_service.save_conversation(title=user_message[:30] or "Neue Anfrage")
+            conversation_id = conv.id
+        else:
+            try:
+                # Check existance via DB service or just try to use it
+                exists = db_service.get_history(limit=1) # Minimal check not available, assume valid or create new on error if needed
+                if not conversation_id:
+                     conv = db_service.save_conversation(title=user_message[:30] or "Neue Anfrage")
+                     conversation_id = conv.id
+            except:
+                 pass
+            
+        # Save user message
+        db_service.save_message(conversation_id, 'user', user_message)
+        
+        # Handle uploads immediately
+        uploaded_files = []
+        if 'files' in request.files:
+            files = request.files.getlist('files')
+            for file in files:
+                try:
+                    file_info = handle_upload(file)
+                    uploaded_files.append(file_info)
+                except Exception as e:
+                    logger.error(f"Upload handle failed: {e}")
+                    raise Exception(f"Datei-Upload fehlgeschlagen: {str(e)}")
+
+        # Create Job in DB
+        job = db_service.create_job(
+            title=user_message[:50] or 'Request',
+            endpoint='detecting...',
+            params={'uploaded_files': uploaded_files},
+            status='processing'
+        )
+        
+        # Update initial progress
+        db_service.update_job(job.id, {
+            'progress': 20,
+            'statusMessage': 'Anfrage vorbereitet...'
+        })
+            
+        # Start background thread
+        thread = threading.Thread(target=process_job_async, args=(job.id, user_message, conversation_id, uploaded_files))
+        thread.daemon = True
+        thread.start()
         
         return jsonify({
+            'success': True,
+            'job_id': job.id,
+            'conversation_id': conversation_id,
+            'uploaded_files': uploaded_files
+        })
+    except Exception as e:
+        logger.exception("Error in process_request")
+        return jsonify({
             'success': False,
-            'job_id': job_id,
             'error': str(e)
         }), 500
 
@@ -704,7 +717,7 @@ def call_nca_api(endpoint, params):
         return {
             'status': 'ok',
             'message': 'NCA Toolkit ist erreichbar (Mock Response)',
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.datetime.now().isoformat()
         }
 
     # VALIDATION
@@ -807,24 +820,27 @@ def call_nca_api(endpoint, params):
                       # Fallback to container if local fails? No, container doesn't have it.
                       raise Exception(f"Website Screenshot Error: {e}")
 
-    url = f"{NCA_API_URL}{endpoint}"
-    headers = {
-        'x-api-key': NCA_API_KEY,
-        'Content-Type': 'application/json'
-    }
+    # ---------------------------------------------------------
+    # CALL NCA API WITH SAFE WRAPPER
+    # ---------------------------------------------------------
+    logger.info(f"🌐 Calling NCA API: {endpoint}")
     
-    response = requests.post(url, headers=headers, json=params, timeout=300)
+    response = safe_api_call(
+        endpoint=endpoint,
+        params=params,
+        nca_api_url=NCA_API_URL,
+        nca_api_key=NCA_API_KEY,
+        timeout=600,
+        max_retries=3
+    )
     
-    if not response.ok:
-        error_text = response.text
-        # Check for specific container upload failure (Firewall/Networking issue)
-        if "Failed to upload" in error_text or "Connection refused" in error_text:
-            logger.error(f"Networking Error: Container cannot reach Host. Firewall? {error_text}")
-            raise Exception(f"Netzwerk-Fehler: Der Container konnte das Ergebnis nicht zurücksenden. Bitte Firewall prüfen (Port 5000 freigeben). Details: {error_text[:100]}")
-            
-        raise Exception(f"NCA API Error: {response.status_code} - {error_text[:200]}")
-    
-    return response.json()
+    if response['success']:
+        logger.info(f"✅ API Success: {endpoint}")
+        return response['data']
+    else:
+        error_msg = response.get('error', 'Unknown error')
+        logger.error(f"❌ API Failed: {endpoint} - {error_msg}")
+        raise Exception(error_msg)
 
 
 @app.route('/uploads/<filename>')
@@ -890,7 +906,7 @@ def health_check():
     
     return jsonify({
         'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.datetime.utcnow().isoformat(),
         'nca_toolkit': {
             'url': NCA_API_URL,
             'status': nca_status

@@ -105,7 +105,7 @@ def local_audio_mixing(video_url, audio_url):
         output_path
     ]
     
-    logger.info(f"🎬 Running Local FFmpeg: {' '.join(cmd)}")
+    logger.debug(f"🎬 Running Local FFmpeg: {' '.join(cmd)}")
     
     try:
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -156,7 +156,7 @@ def create_thumbnail(video_url, time_offset="00:00:01"):
         output_path
     ]
 
-    logger.info(f"📸 Generating Thumbnail: {' '.join(cmd)}")
+    logger.debug(f"📸 Generating Thumbnail: {' '.join(cmd)}")
 
     try:
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -206,7 +206,7 @@ def local_audio_concat(audio_urls):
     
     cmd = ['ffmpeg', '-y'] + inputs + ['-filter_complex', filter_complex, '-map', '[out]', output_path]
 
-    logger.info(f"🎤 Concatenating Audio: {' '.join(cmd)}")
+    logger.debug(f"🎤 Concatenating Audio: {' '.join(cmd)}")
 
     try:
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -260,7 +260,7 @@ def create_video_from_image_and_audio(image_url, audio_url):
         output_path
     ]
     
-    logger.info(f"🎬 Creating video from image+audio: {' '.join(cmd)}")
+    logger.debug(f"🎬 Creating video from image+audio: {' '.join(cmd)}")
     
     try:
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

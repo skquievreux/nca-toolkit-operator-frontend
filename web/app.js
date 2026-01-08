@@ -12,7 +12,13 @@ const state = {
     allScenarios: {},
     currentScenarioId: null,
     currentConversationId: localStorage.getItem('last_conversation_id') || null,
-    logs: []
+    logs: [],
+    backendUrl: CONFIG.apiUrl,
+    jobQueue: {
+        jobs: {},
+        polling: {},
+        collapsed: localStorage.getItem('jobQueueCollapsed') === 'true'
+    }
 };
 
 // ===== DOM Elements =====
@@ -834,7 +840,11 @@ document.getElementById('executeScenarioBtn').onclick = async () => {
         elements.messages.removeChild(processingMsg);
 
         if (data.success) {
-            addMessage('assistant', `✅ Szenario abgeschlossen!`, { result: data.results });
+            if (data.job_id) {
+                await pollJobStatus(data.job_id, data);
+            } else {
+                addMessage('assistant', `✅ Szenario abgeschlossen!`, { result: data.results });
+            }
             if (data.conversation_id) state.currentConversationId = data.conversation_id;
         } else {
             addMessage('assistant', `❌ Fehler: ${data.error}`, { error: data.error });
@@ -990,9 +1000,32 @@ if (versionInfo && typeof APP_VERSION !== 'undefined') {
     versionInfo.title = `Build: ${APP_VERSION.buildTime}`;
 }
 
+// Reset to Landing Page
+function resetToLandingPage() {
+    state.currentConversationId = null;
+    state.messages = [];
+    state.attachedFiles = [];
+
+    localStorage.removeItem('last_conversation_id');
+
+    // Reset UI
+    if (elements.messages) elements.messages.innerHTML = '';
+    renderFileAttachments();
+
+    // Show welcome message again if it was hidden
+    const welcome = document.querySelector('.welcome-message');
+    if (welcome) welcome.style.display = 'block';
+
+    // Clear URL if needed (optional)
+    // window.history.pushState({}, '', '/');
+
+    addLogMessage('🏠 Zurück zur Startseite');
+}
+
 // Make functions global for onclick handlers
 window.removeFile = removeFile;
 window.showLogs = showLogs;
+window.resetToLandingPage = resetToLandingPage;
 
 // 🆕 Initialize Smart Detection
 let smartDetector = null;
@@ -1017,6 +1050,10 @@ setupDragAndDrop();
 loadScenarios(); // Auto-load scenarios on start
 checkLastConversation(); // Auto-load last conv if exists
 
+// Initialize Job Queue (CRITICAL for job visibility!)
+// Job Queue is initialized in job-queue.js now
+
+
 async function checkLastConversation() {
     if (state.currentConversationId) {
         try {
@@ -1035,11 +1072,18 @@ async function checkLastConversation() {
     }
 }
 
+// Use dynamic version from version.js
+if (typeof APP_VERSION !== 'undefined') {
+    addLogMessage(`🏗️ Build: ${APP_VERSION.build}`, 'info');
+    console.log(`🚀 NCA Toolkit AI Assistant v${APP_VERSION.version} geladen!`);
+    console.log(`🏗️  Build: ${APP_VERSION.build} (${APP_VERSION.commit})`);
+} else {
+    console.warn("⚠️ version.js not loaded");
+}
+
 addLogMessage(`🚀 NCA Toolkit AI Assistant geladen!`, 'success');
 addLogMessage(`📡 Backend URL: ${CONFIG.apiUrl}`, 'info');
 
-console.log('🚀 NCA Toolkit AI Assistant v2.0 geladen!');
-console.log('🏗️  Build: 2026.01.08.031');
 console.log('Backend URL:', CONFIG.apiUrl);
 console.log('Drag & Drop: Aktiviert');
 console.log('Live-Logs: Aktiviert');
@@ -1048,85 +1092,97 @@ console.log('Live-Logs: Aktiviert');
 function renderResultData(result) {
     if (!result) return '';
 
-    let html = '';
-
-    // Helper to find URLs recursively
-    const findUrls = (obj) => {
-        let urls = [];
-        if (typeof obj === 'string' && (obj.startsWith('http') || obj.startsWith('/'))) {
-            urls.push(obj);
-        } else if (typeof obj === 'object' && obj !== null) {
-            Object.values(obj).forEach(val => urls = urls.concat(findUrls(val)));
-        }
-        return urls;
-    };
-
-    const urls = findUrls(result);
-    // Remove duplicates
-    const uniqueUrls = [...new Set(urls)];
-
-    if (uniqueUrls.length > 0) {
-        html += '<div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px;">';
-        uniqueUrls.forEach(url => {
-            // Clean URL and get extension
-            let cleanUrl = url.split('?')[0];
-            let ext = cleanUrl.split('.').pop().toLowerCase();
-            let fullUrl = url.startsWith('/') ? CONFIG.apiUrl + url : url;
-
-            if (['mp4', 'mov', 'webm', 'mkv'].includes(ext)) {
-                html += `
-                    <div style="width:100%; margin-top: 10px;">
-                        <video controls src="${fullUrl}" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color);"></video>
-                        <div style="margin-top: 8px;">
-                            <a href="${fullUrl}" download="${cleanUrl.split('/').pop()}" target="_blank" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-size: 0.9em; padding: 8px 16px;">
-                                <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                Video herunterladen
-                            </a>
-                        </div>
-                    </div>`;
-            } else if (['mp3', 'wav', 'aac', 'm4a'].includes(ext)) {
-                html += `
-                    <div style="width:100%; margin-top: 10px;">
-                        <audio controls src="${fullUrl}" style="width: 100%;"></audio>
-                        <div style="margin-top: 8px;">
-                            <a href="${fullUrl}" download="${cleanUrl.split('/').pop()}" target="_blank" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-size: 0.9em; padding: 8px 16px;">
-                                <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                Audio herunterladen
-                            </a>
-                        </div>
-                    </div>`;
-            } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
-                html += `
-                    <div style="margin-top: 10px;">
-                        <a href="${fullUrl}" target="_blank"><img src="${fullUrl}" style="max-width: 200px; max-height: 200px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border-color);"></a>
-                        <div style="margin-top: 8px;">
-                            <a href="${fullUrl}" download="${cleanUrl.split('/').pop()}" target="_blank" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-size: 0.9em; padding: 8px 16px;">
-                                <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                Bild speichern
-                            </a>
-                        </div>
-                    </div>`;
-            } else {
-                html += `
-                    <div style="margin-top: 8px;">
-                        <a href="${fullUrl}" download="${cleanUrl.split('/').pop()}" target="_blank" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-size: 0.9em; padding: 8px 16px;">
-                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                            ${cleanUrl.split('/').pop()}
-                        </a>
-                    </div>`;
-            }
-        });
-        html += '</div>';
+    // Check if Normalizer is loaded
+    if (typeof ResultNormalizer === 'undefined') {
+        console.error("ResultNormalizer missing! Fallback to JSON stringify");
+        return `<pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>`;
     }
 
-    // JSON Raw Data (collapsed)
+    const blocks = ResultNormalizer.normalize(result);
+    // Use escapeHtml for raw data
+    const rawData = escapeHtml(JSON.stringify(result, null, 2));
+
+    let html = '<div class="result-container" style="display: flex; flex-direction: column; gap: 16px;">';
+
+    if (blocks.length === 0) {
+        html += '<div class="text-muted">Keine anzeigbaren Inhalte gefunden.</div>';
+    } else {
+        blocks.forEach((block, index) => {
+            let contentHtml = '';
+            const labelStyle = 'font-size: 0.85em; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;';
+            const fullUrl = block.url; // URLs are already constructed by Normalizer
+
+            switch (block.type) {
+                case 'video':
+                    contentHtml = `
+                        <div class="media-block video" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                            <div style="${labelStyle}">🎥 ${block.label || 'Video'}</div>
+                            <video controls style="width: 100%; max-height: 400px; border-radius: 4px; background: #000;">
+                                <source src="${fullUrl}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            <div style="font-size: 0.8em; margin-top: 8px;">
+                                <a href="${fullUrl}" target="_blank" download style="color: var(--primary-color); text-decoration: none;">⬇️ Video herunterladen</a>
+                            </div>
+                        </div>`;
+                    break;
+
+                case 'audio':
+                    contentHtml = `
+                        <div class="media-block audio" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                            <div style="${labelStyle}">🔊 ${block.label || 'Audio'}</div>
+                            <audio controls style="width: 100%; margin-top: 4px;">
+                                <source src="${fullUrl}">
+                                Your browser does not support the audio element.
+                            </audio>
+                            <div style="font-size: 0.8em; margin-top: 8px;">
+                                <a href="${fullUrl}" target="_blank" download style="color: var(--primary-color); text-decoration: none;">⬇️ Audio herunterladen</a>
+                            </div>
+                        </div>`;
+                    break;
+
+                case 'image':
+                    contentHtml = `
+                        <div class="media-block image" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                             <div style="${labelStyle}">🖼️ ${block.label || 'Image'}</div>
+                             <a href="${fullUrl}" target="_blank">
+                                <img src="${fullUrl}" style="max-width: 100%; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);" loading="lazy" />
+                             </a>
+                             <div style="font-size: 0.8em; margin-top: 8px;">
+                                <a href="${fullUrl}" target="_blank" download style="color: var(--primary-color); text-decoration: none;">⬇️ Bild speichern</a>
+                            </div>
+                        </div>`;
+                    break;
+
+                case 'text':
+                    // Check if markdown
+                    const text = block.content;
+                    const isMarkdown = true; // Always assume markdown for now or check
+                    const rendered = (typeof marked !== 'undefined') ? marked.parse(text) : escapeHtml(text).replace(/\n/g, '<br>');
+
+                    contentHtml = `
+                        <div class="text-block">
+                            <div style="${labelStyle}">📝 ${block.label || 'Text Result'}</div>
+                            <div class="markdown-body" style="padding: 12px; background: rgba(255, 255, 255, 0.03); border-left: 3px solid var(--primary-color); border-radius: 4px; overflow-x: auto; font-size: 0.95em;">
+                                ${rendered}
+                            </div>
+                        </div>`;
+                    break;
+            }
+
+            html += contentHtml;
+        });
+    }
+
+    // Always show raw data collapsed
     html += `
-        <details style="margin-top: 10px;">
-            <summary style="cursor: pointer; color: var(--text-muted); font-size: 0.8em; user-select: none;">Rohe Daten anzeigen</summary>
-            <pre style="font-size: 0.7em; margin-top: 5px;">${JSON.stringify(result, null, 2)}</pre>
+        <details style="margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+            <summary style="cursor: pointer; color: var(--text-muted); font-size: 0.8em; user-select: none;">🔍 Rohe Daten anzeigen</summary>
+            <pre style="font-size: 0.7em; margin-top: 10px; max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px;">${rawData}</pre>
         </details>
     `;
 
+    html += '</div>';
     return html;
 }
 

@@ -58,23 +58,24 @@ def get_file_size_mb(size_bytes):
     return round(size_bytes / (1024 * 1024), 2)
 
 
+def calculate_file_hash(file_stream):
+    """Calculates SHA256 hash of a file stream"""
+    import hashlib
+    sha256_hash = hashlib.sha256()
+    for byte_block in iter(lambda: file_stream.read(4096), b""):
+        sha256_hash.update(byte_block)
+    file_stream.seek(0)
+    return sha256_hash.hexdigest()
+
 def handle_upload(file):
     """
-    Verarbeitet File-Upload
+    Verarbeitet File-Upload mit Deduplikation
     
     Args:
         file: Werkzeug FileStorage object
     
     Returns:
-        {
-            'filename': 'original.mp4',
-            'stored_filename': 'abc123.mp4',
-            'url': 'http://localhost:5000/uploads/abc123.mp4',
-            'type': 'mp4',
-            'file_type': 'video',
-            'size': 1024000,
-            'size_mb': 1.02
-        }
+        dict: File info including hash and url
     """
     
     if not file:
@@ -92,6 +93,32 @@ def handle_upload(file):
         max_mb = get_file_size_mb(MAX_FILE_SIZE)
         actual_mb = get_file_size_mb(file_size)
         raise ValueError(f"Datei zu groß: {actual_mb}MB (max: {max_mb}MB)")
+        
+    # Deduplication Check
+    try:
+        file_hash = calculate_file_hash(file)
+        
+        # Late import to prevent circular dependency
+        import db_service
+        existing_asset = db_service.get_asset_by_hash(file_hash)
+        
+        if existing_asset:
+            logger.info(f"♻️  Duplicate file detected. Reusing existing asset: {existing_asset.filename}")
+            return {
+                'filename': file.filename, # Keep original filename from this request
+                'stored_filename': existing_asset.filename,
+                'url': existing_asset.url,
+                'type': existing_asset.fileType, # Using stored fileType
+                'file_type': existing_asset.fileType,
+                'size': existing_asset.size,
+                'size_mb': get_file_size_mb(existing_asset.size),
+                'hash': existing_asset.hash
+            }
+            
+    except Exception as e:
+        logger.warning(f"Deduplication check failed, proceeding with normal upload: {e}")
+        file.seek(0) # Ensure rewound if hash calc failed midway
+        file_hash = None
     
     # Generate unique filename
     original_filename = secure_filename(file.filename)
@@ -103,7 +130,7 @@ def handle_upload(file):
     init_upload_folder()
     file.save(filepath)
     
-    logger.info(f"File uploaded: {original_filename} → {stored_filename} ({get_file_size_mb(file_size)}MB)")
+    logger.debug(f"File uploaded: {original_filename} → {stored_filename} ({get_file_size_mb(file_size)}MB)")
     
     host_ip = get_lan_ip()
     base_url = f"http://{host_ip}:5000"
@@ -111,17 +138,28 @@ def handle_upload(file):
     # Fallback to host.docker.internal if detection fails (e.g. offline)
     file_url = f"{base_url}/uploads/{stored_filename}"
     
-    logger.info(f"Generated File URL: {file_url} (Host IP: {host_ip})")
+    logger.debug(f"Generated File URL: {file_url} (Host IP: {host_ip})")
     
-    return {
+    file_info = {
         'filename': original_filename,
         'stored_filename': stored_filename,
         'url': file_url,
         'type': ext,
         'file_type': get_file_type(original_filename),
         'size': file_size,
-        'size_mb': get_file_size_mb(file_size)
+        'size_mb': get_file_size_mb(file_size),
+        'hash': file_hash
     }
+    
+    # Save to DB immediately to enable future deduplication
+    try:
+        import db_service
+        db_service.save_asset(file_info)
+        logger.debug(f"💾 Asset stored in DB: {file_hash}")
+    except Exception as e:
+        logger.error(f"Failed to save asset to DB: {e}")
+        
+    return file_info
 
 
 def cleanup_old_files(max_age_hours=24):

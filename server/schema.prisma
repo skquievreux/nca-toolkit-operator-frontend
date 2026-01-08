@@ -33,8 +33,12 @@ model Job {
   endpoint  String
   params    String   // JSON blob
   result    String?  // JSON blob
-  status    String   // "pending", "completed", "failed"
+  status    String   // "pending", "processing", "completed", "failed"
+  progress  Int      @default(0)
+  statusMessage String? // For UI updates like "Downloading video..."
+  title     String?  // User friendly title
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Asset {
@@ -46,5 +50,6 @@ model Asset {
   fileType       String   // "video", "audio", "image"
   mimeType       String?
   size           Int
+  hash           String?  @unique
   createdAt      DateTime @default(now())
 }
