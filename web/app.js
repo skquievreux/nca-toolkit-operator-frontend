@@ -111,7 +111,8 @@ function showLogs() {
             <div class="modal-body" style="max-height: 500px; overflow-y: auto; font-family: monospace; font-size: 12px;">
                 ${logsHtml || '<p style="text-align: center; color: var(--text-muted);">Keine Logs verfügbar</p>'}
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer" style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn-primary" onclick="copyLogsToClipboard()">📋 Alle kopieren</button>
                 <button class="btn-secondary" onclick="this.closest('.modal').remove()">Schließen</button>
             </div>
         </div>
@@ -122,6 +123,46 @@ function showLogs() {
         if (e.target === modal) modal.remove();
     });
 }
+
+function copyLogsToClipboard() {
+    const logsText = state.logs.map(log => {
+        const time = new Date(log.timestamp).toLocaleTimeString('de-DE');
+        const icon = {
+            'info': 'ℹ️',
+            'success': '✅',
+            'error': '❌',
+            'warning': '⚠️'
+        }[log.type] || 'ℹ️';
+        return `${time} ${icon} ${log.message}`;
+    }).reverse().join('\n');
+
+    navigator.clipboard.writeText(logsText).then(() => {
+        // Show success notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--primary-color);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 10001;
+            animation: slideIn 0.3s ease;
+        `;
+        notification.textContent = '✓ Logs in Zwischenablage kopiert!';
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            notification.remove();
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy logs:', err);
+        alert('Fehler beim Kopieren der Logs');
+    });
+}
+
 
 // ===== API Call with new /api/process endpoint =====
 async function processRequest(message, files) {
@@ -250,7 +291,7 @@ function createDataCard(data) {
     const card = document.createElement('div');
     card.className = 'api-action';
 
-    if (data.intent) {
+    if (data.intent || data.result) {
         card.innerHTML = `
             <div class="api-action-header">
                 <div class="api-action-icon">
@@ -260,13 +301,24 @@ function createDataCard(data) {
                 </div>
                 <div>
                     <div class="api-action-title">🎯 Intent erkannt</div>
-                    <div class="api-action-endpoint">${data.intent.endpoint || 'Unbekannt'}</div>
+                    <div class="api-action-endpoint">${(data.intent && data.intent.endpoint) ? data.intent.endpoint : 'Ergebnis verfügbar'}</div>
                 </div>
             </div>
             <div class="api-action-params">
-                <div><strong>Confidence:</strong> ${(data.intent.confidence * 100).toFixed(0)}%</div>
-                <div><strong>Reasoning:</strong> ${data.intent.reasoning || 'N/A'}</div>
-                ${data.params ? `<div><strong>Parameter:</strong></div><pre>${JSON.stringify(data.params, null, 2)}</pre>` : ''}
+                <div><strong>Confidence:</strong> ${(data.intent && data.intent.confidence) ? (data.intent.confidence * 100).toFixed(0) + '%' : 'N/A'}</div>
+                <div><strong>Reasoning:</strong> ${(data.intent && data.intent.reasoning) ? data.intent.reasoning : 'Direkte Ausführung'}</div>
+                ${data.params ? `
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                        <div><strong>🔧 API Aufruf:</strong></div>
+                        <div style="font-family: monospace; font-size: 0.9em; margin-top: 4px;">
+                            <span style="color: var(--primary-color); font-weight: 600;">POST</span> ${data.intent.endpoint}
+                        </div>
+                        <details style="margin-top: 8px;">
+                            <summary style="cursor: pointer; color: var(--text-muted); font-size: 0.9em;">Parameter anzeigen</summary>
+                            <pre style="margin-top: 8px; font-size: 0.85em;">${JSON.stringify(data.params, null, 2)}</pre>
+                        </details>
+                    </div>
+                ` : ''}
             </div>
             ${data.result ? `
                 <div class="api-action-params" style="background: rgba(34, 197, 94, 0.1); border-left: 3px solid #22c55e;">
@@ -682,6 +734,7 @@ addLogMessage(`🚀 NCA Toolkit AI Assistant geladen!`, 'success');
 addLogMessage(`📡 Backend URL: ${CONFIG.apiUrl}`, 'info');
 
 console.log('🚀 NCA Toolkit AI Assistant v2.0 geladen!');
+console.log('🏗️  Build: 2026.01.08.030');
 console.log('Backend URL:', CONFIG.apiUrl);
 console.log('Drag & Drop: Aktiviert');
 console.log('Live-Logs: Aktiviert');
@@ -689,9 +742,9 @@ console.log('Live-Logs: Aktiviert');
 
 function renderResultData(result) {
     if (!result) return '';
-    
+
     let html = '';
-    
+
     // Helper to find URLs recursively
     const findUrls = (obj) => {
         let urls = [];
@@ -702,11 +755,11 @@ function renderResultData(result) {
         }
         return urls;
     };
-    
+
     const urls = findUrls(result);
     // Remove duplicates
     const uniqueUrls = [...new Set(urls)];
-    
+
     if (uniqueUrls.length > 0) {
         html += '<div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px;">';
         uniqueUrls.forEach(url => {
@@ -714,20 +767,53 @@ function renderResultData(result) {
             let cleanUrl = url.split('?')[0];
             let ext = cleanUrl.split('.').pop().toLowerCase();
             let fullUrl = url.startsWith('/') ? CONFIG.apiUrl + url : url;
-            
+
             if (['mp4', 'mov', 'webm', 'mkv'].includes(ext)) {
-                html += `<div style="width:100%"><video controls src="${fullUrl}" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color);"></video></div>`;
+                html += `
+                    <div style="width:100%; margin-top: 10px;">
+                        <video controls src="${fullUrl}" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color);"></video>
+                        <div style="margin-top: 8px;">
+                            <a href="${fullUrl}" download="${cleanUrl.split('/').pop()}" target="_blank" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-size: 0.9em; padding: 8px 16px;">
+                                <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                Video herunterladen
+                            </a>
+                        </div>
+                    </div>`;
             } else if (['mp3', 'wav', 'aac', 'm4a'].includes(ext)) {
-                html += `<div style="width:100%"><audio controls src="${fullUrl}" style="width: 100%;"></audio></div>`;
+                html += `
+                    <div style="width:100%; margin-top: 10px;">
+                        <audio controls src="${fullUrl}" style="width: 100%;"></audio>
+                        <div style="margin-top: 8px;">
+                            <a href="${fullUrl}" download="${cleanUrl.split('/').pop()}" target="_blank" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-size: 0.9em; padding: 8px 16px;">
+                                <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                Audio herunterladen
+                            </a>
+                        </div>
+                    </div>`;
             } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
-                html += `<a href="${fullUrl}" target="_blank"><img src="${fullUrl}" style="max-width: 200px; max-height: 200px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border-color);"></a>`;
+                html += `
+                    <div style="margin-top: 10px;">
+                        <a href="${fullUrl}" target="_blank"><img src="${fullUrl}" style="max-width: 200px; max-height: 200px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border-color);"></a>
+                        <div style="margin-top: 8px;">
+                            <a href="${fullUrl}" download="${cleanUrl.split('/').pop()}" target="_blank" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-size: 0.9em; padding: 8px 16px;">
+                                <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                Bild speichern
+                            </a>
+                        </div>
+                    </div>`;
             } else {
-                 html += `<a href="${fullUrl}" target="_blank" class="btn-secondary" style="font-size: 0.9em; padding: 5px 10px; text-decoration: none;">⬇️ ${cleanUrl.split('/').pop()}</a>`;
+                html += `
+                    <div style="margin-top: 8px;">
+                        <a href="${fullUrl}" download="${cleanUrl.split('/').pop()}" target="_blank" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-size: 0.9em; padding: 8px 16px;">
+                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            ${cleanUrl.split('/').pop()}
+                        </a>
+                    </div>`;
             }
         });
         html += '</div>';
     }
-    
+
     // JSON Raw Data (collapsed)
     html += `
         <details style="margin-top: 10px;">
@@ -735,7 +821,7 @@ function renderResultData(result) {
             <pre style="font-size: 0.7em; margin-top: 5px;">${JSON.stringify(result, null, 2)}</pre>
         </details>
     `;
-    
+
     return html;
 }
 

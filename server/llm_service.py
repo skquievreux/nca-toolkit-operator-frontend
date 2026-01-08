@@ -48,18 +48,18 @@ Aufgabe:
 WICHTIG:
 - Wenn Dateien hochgeladen wurden, nutze die file_urls
 - Wenn URLs in der Nachricht sind, extrahiere sie
-- Setze sinnvolle Defaults
-- Gib confidence zwischen 0 und 1 an
+- KEINE halluzinierten Parameter! Wenn ein Parameter fehlt, gib `endpoint: null` zurück.
+- Erfinde KEINE Endpoints. Nutze NUR die oben gelisteten.
+- Gib confidence zwischen 0 und 1 an.
 
 Antwort-Format (JSON):
 {
   "endpoint": "/v1/...",
   "params": {
-    "param1": "value1",
-    "param2": "value2"
+    "param1": "value1"
   },
   "confidence": 0.95,
-  "reasoning": "Kurze Erklärung"
+  "reasoning": "Kurze Erklärung oder FEHLERGRUND wenn endpoint null"
 }
 
 Beispiele:
@@ -136,6 +136,26 @@ def extract_intent_and_params(user_message, uploaded_files=None):
         
         logger.info(f"LLM Context:\n{context}")
         
+        # Get dynamic system prompt with discovered endpoints
+        from endpoint_discovery import get_dynamic_system_prompt
+        dynamic_prompt = get_dynamic_system_prompt()
+        
+        # Merge with local capabilities (that are NOT in the container)
+        local_capabilities = """
+Zusätzliche LOKALE Funktionen (Server-seitig verfügbar):
+
+** /v1/image/screenshot/webpage **
+   - Beschreibung: Erstellt einen Screenshot einer Webseite
+   - Parameter: url (string), viewport_width (int, default: 1920), viewport_height (int, default: 1080)
+   - Beispiel: "Screenshot von google.de" -> endpoint: /v1/image/screenshot/webpage
+
+** /v1/video/thumbnail **
+   - Beschreibung: Erstellt ein Thumbnail aus einem Video
+   - Parameter: url (string - file url)
+   - Beispiel: "Mache ein Thumbnail" -> endpoint: /v1/video/thumbnail
+"""
+        system_prompt = dynamic_prompt + "\n" + local_capabilities
+        
         # Call Gemini
         model = genai.GenerativeModel(
             'gemini-2.0-flash-exp',
@@ -144,7 +164,7 @@ def extract_intent_and_params(user_message, uploaded_files=None):
             }
         )
         
-        response = model.generate_content(SYSTEM_PROMPT + "\n\n" + context)
+        response = model.generate_content(system_prompt + "\n\n" + context)
         
         # Parse response
         result = json.loads(response.text)
@@ -230,31 +250,78 @@ def fallback_extraction(user_message, uploaded_files=None):
         elif urls and len(urls) >= 2:
             video_url = urls[0]
             audio_url = urls[1]
+        # Helper: Get Host IP for webhook
+        def get_lan_ip():
+            import socket
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                ip = s.getsockname()[0]
+                s.close()
+                return ip
+            except:
+                return 'host.docker.internal' # Fallback
         
+        host_ip_addr = get_lan_ip()
+
         return {
-            'endpoint': '/v1/ffmpeg/compose',
+            'endpoint': '/audio-mixing',
             'params': {
-                'inputs': [
-                    {'file_url': video_url},
-                    {'file_url': audio_url}
-                ],
-                'outputs': [
-                    {
-                        'options': [
-                            {'option': '-c:v', 'argument': 'copy'},
-                            {'option': '-c:a', 'argument': 'aac'},
-                            {'option': '-map', 'argument': '0:v:0'},
-                            {'option': '-map', 'argument': '1:a:0'},
-                            {'option': '-shortest', 'argument': None}
-                        ]
-                    }
-                ],
-                'global_options': [{'option': '-y'}],
-                'id': f"merge-{int(time.time())}"
+                'video_url': video_url,
+                'audio_url': audio_url,
+                'video_vol': 100,
+                'audio_vol': 100,
+                'output_length': 'video',
+                'webhook_url': f"http://{host_ip_addr}:5000/api/upload"
             },
-            'confidence': 0.8,
-            'reasoning': 'Fallback: Video+Audio Merge via FFmpeg Compose'
+            'confidence': 0.9,
+            'reasoning': 'Fallback: Video+Audio Mixing (legacy endpoint checked)'
         }
+
+    # Audio/Video Concatenation (Loop/Join)
+    if any(kw in message_lower for kw in ['hintereinander', 'loop', 'wiederhole', 'concat', 'concatenate', 'reihe']):
+        
+        media_files = []
+        if uploaded_files:
+            media_files = [f['url'] for f in uploaded_files]
+        elif urls:
+            media_files = urls
+
+        if not media_files:
+             # No files uploaded and no URLs in message
+             # Check if user mentioned specific test files
+             if 'audio1' in message_lower:
+                  host_ip = get_lan_ip()
+                  media_files = [f'http://{host_ip}:5000/uploads/audio-1.mp3']
+             elif 'video1' in message_lower:
+                  host_ip = get_lan_ip()
+                  media_files = [f'http://{host_ip}:5000/uploads/video-1.mp4']
+
+
+        if media_files:
+            # Check for repetition
+            count = 1
+            if any(kw in message_lower for kw in ['dreimal', '3x', '3 mal', '3 times']):
+                count = 3
+            elif any(kw in message_lower for kw in ['zweimal', '2x', '2 mal', '2 times']):
+                count = 2
+            
+
+
+            final_files = []
+            if len(media_files) == 1 and count > 1:
+                final_files = media_files * count # Repeat the same file
+            else:
+                final_files = media_files # Just join different files
+
+            return {
+                'endpoint': '/combine-videos', # Correct endpoint per container source
+                'params': {
+                    'media_urls': final_files # Correct param name
+                },
+                'confidence': 0.85,
+                'reasoning': f'Fallback: Concatenation of {len(final_files)} files requested'
+            }
     
     # Transkription
     elif any(kw in message_lower for kw in ['transkript', 'transcrib', 'untertitel', 'text', 'transkrib']):
@@ -270,7 +337,7 @@ def fallback_extraction(user_message, uploaded_files=None):
             language = 'en'
         
         return {
-            'endpoint': '/v1/media/transcribe',
+            'endpoint': '/transcribe',
             'params': {
                 'media_url': media_url or '',
                 'language': language,
@@ -305,7 +372,7 @@ def fallback_extraction(user_message, uploaded_files=None):
         elif urls: media_url = urls[0]
         
         return {
-            'endpoint': '/v1/media/convert/mp3',
+            'endpoint': '/media-to-mp3',
             'params': {'url': media_url or ''},
             'confidence': 0.8,
             'reasoning': 'Fallback: Keyword-Matching für MP3-Konvertierung'

@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCA Toolkit - API Dokumentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="docs.css">
+</head>
+
+<body>
+    <a href="/" class="back-button">
+        <span>←</span> Zurück zum Assistant
+    </a>
+
+    <div class="docs-layout">
+        <!-- Sidebar Navigation -->
+        <nav class="docs-sidebar">
+            <h2 style="display: flex; align-items: center; gap: 8px;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
+                Inhalt
+            </h2>
+            <ul class="docs-nav">
+                <li><a href="#getting-started" class="active">🚀 Erste Schritte</a></li>
+                <li><a href="#tag-system">🏷️ Tag-System</a></li>
+
+                <li>
+                    <a href="#audio">🎵 Audio</a>
+                    <ul>
+                        <li><a href="#audio-concat">Concatenate</a></li>
+                        <li><a href="#audio-mixing">Mixing</a></li>
+                        <li><a href="#media-to-mp3">Zu MP3</a></li>
+                    </ul>
+                </li>
+
+                <li>
+                    <a href="#video">🎥 Video</a>
+                    <ul>
+                        <li><a href="#video-concat">Zusammenfügen</a></li>
+                        <li><a href="#video-caption">Untertitel</a></li>
+                        <li><a href="#video-watermark">Wasserzeichen</a></li>
+                        <li><a href="#video-audio">Audio+Video</a></li>
+                        <li><a href="#video-tools">Tools (Cut/Trim)</a></li>
+                    </ul>
+                </li>
+
+                <li>
+                    <a href="#transcription">📝 Transkription</a>
+                    <ul>
+                        <li><a href="#transcribe">AI Transcribe</a></li>
+                    </ul>
+                </li>
+
+                <li>
+                    <a href="#image">🖼️ Bild</a>
+                    <ul>
+                        <li><a href="#image-video">Zu Video</a></li>
+                        <li><a href="#screenshot">Screenshot</a></li>
+                    </ul>
+                </li>
+
+                <li>
+                    <a href="#storage">☁️ Storage</a>
+                    <ul>
+                        <li><a href="#gdrive">Google Drive</a></li>
+                        <li><a href="#s3">S3 / Cloud</a></li>
+                    </ul>
+                </li>
+
+                <li>
+                    <a href="#toolkit">🛠️ Toolkit</a>
+                    <ul>
+                        <li><a href="#test">Status & Test</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="docs-content">
+            <!-- Introduction -->
+            <section id="getting-started" class="intro-section">
+                <h1>📚 NCA Toolkit API</h1>
+                <p>
+                    Willkommen zur Dokumentation des No-Code Architects Toolkit.
+                    Dieses Toolkit bietet eine Sammlung leistungsstarker Multimedia-Tools,
+                    die per natürlicher Sprache oder über die API gesteuert werden können.
+                </p>
+
+                <div style="margin-top: 24px;">
+                    <h3>⚡ Schnellstart</h3>
+                    <p>Die meisten Funktionen können Sie direkt im Chat nutzen:</p>
+                    <div class="workflow-card">
+                        <h4>Beispiel-Workflow</h4>
+                        <ol class="workflow-steps">
+                            <li>Laden Sie eine Datei per Drag & Drop hoch</li>
+                            <li>Schreiben Sie: "Konvertiere diese Datei zu MP3"</li>
+                            <li>Das Toolkit erkennt automatisch den richtigen Endpoint</li>
+                        </ol>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tag System -->
+            <section id="tag-system">
+                <h2>🏷️ Tag-System & Platzhalter</h2>
+                <p>Nutzen Sie diese Platzhalter in Ihren Befehlen, um auf Dateien zu verweisen:</p>
+
+                <table class="tag-table">
+                    <thead>
+                        <tr>
+                            <th>Tag / Begriff</th>
+                            <th>Bedeutung</th>
+                            <th>Beispiel</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>{diese Datei}</code></td>
+                            <td>Bezieht sich auf die hochgeladene Datei (automatische Erkennung)</td>
+                            <td>"Transkribiere diese Datei"</td>
+                        </tr>
+                        <tr>
+                            <td><code>{Video}</code> / <code>{Audio}</code></td>
+                            <td>Spezifischer Dateityp (wenn mehrere hochgeladen)</td>
+                            <td>"Füge dieses Video und dieses Audio zusammen"</td>
+                        </tr>
+                        <tr>
+                            <td><code>(YouTube URL)</code></td>
+                            <td>Wird automatisch erkannt und heruntergeladen</td>
+                            <td>"Lade https://youtube.com/... herunter"</td>
+                        </tr>
+                        <tr>
+                            <td><code>Audio1</code> / <code>Video1</code></td>
+                            <td>Interne Test-Dateien (für Demos ohne Upload)</td>
+                            <td>"Nutze Video1 für einen Test"</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Audio Section -->
+            <section id="audio">
+                <h2>🎵 Audio Funktionen</h2>
+
+                <!-- Audio Concatenate -->
+                <article id="audio-concat" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/v1/audio/concatenate</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+
+                    <div class="endpoint-description">
+                        Verbindet mehrere Audiodateien zu einer einzigen Datei. Nützlich für Podcasts (Intro+Main+Outro)
+                        oder Loops.
+                    </div>
+
+                    <h4>📝 Beispiele</h4>
+                    <div class="examples-grid">
+                        <div class="example-item" onclick="useExample('Füge diese Audiodateien zusammen')">
+                            <div class="example-scenario">Mehrere Audios verbinden</div>
+                            <div class="example-command">"Füge diese Audiodateien zusammen"</div>
+                            <div class="example-files">📎 intro.mp3, main.mp3</div>
+                            <div class="example-result">✅ combined.mp3</div>
+                        </div>
+
+                        <div class="example-item"
+                            onclick="useExample('Spiele diese Audiodatei dreimal hintereinander ab')">
+                            <div class="example-scenario">Loop erstellen (3x)</div>
+                            <div class="example-command">"Spiele diese Datei 3x ab"</div>
+                            <div class="example-files">📎 beat.mp3</div>
+                            <div class="example-result">✅ loop_3x.mp3</div>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Audio Mixing -->
+                <article id="audio-mixing" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/audio-mixing</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+
+                    <div class="endpoint-description">
+                        Mischt eine Videodatei mit einer Audiodatei. Die Lautstärke kann angepasst werden.
+                    </div>
+
+                    <h4>📋 Parameter</h4>
+                    <table class="params-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Typ</th>
+                                <th>Beschreibung</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>video_url</code></td>
+                                <td>string</td>
+                                <td>URL der Videodatei</td>
+                            </tr>
+                            <tr>
+                                <td><code>audio_url</code></td>
+                                <td>string</td>
+                                <td>URL der Audiodatei</td>
+                            </tr>
+                            <tr>
+                                <td><code>video_vol</code> / <code>audio_vol</code></td>
+                                <td>number</td>
+                                <td>Lautstärke in % (Default: 100)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h4>📝 Beispiele</h4>
+                    <div class="examples-grid">
+                        <div class="example-item" onclick="useExample('Füge dieses Video und dieses Audio zusammen')">
+                            <div class="example-scenario">Musik unter Video legen</div>
+                            <div class="example-command">"Füge dieses Video und Audio zusammen"</div>
+                            <div class="example-files">📎 video.mp4, music.mp3</div>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Media to MP3 -->
+                <article id="media-to-mp3" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/media-to-mp3</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+
+                    <div class="endpoint-description">
+                        Extrahiert Audio aus Videos oder konvertiert Audioformate zu MP3.
+                    </div>
+
+                    <h4>📝 Beispiele</h4>
+                    <div class="examples-grid">
+                        <div class="example-item" onclick="useExample('Konvertiere diese Datei zu MP3')">
+                            <div class="example-scenario">Audio extrahieren</div>
+                            <div class="example-command">"Konvertiere diese Datei zu MP3"</div>
+                            <div class="example-files">📎 video.mp4</div>
+                        </div>
+
+                        <div class="example-item" onclick="useExample('https://youtube.com/watch?v=... als MP3')">
+                            <div class="example-scenario">YouTube zu MP3</div>
+                            <div class="example-command">"https://youtube.com/... als MP3"</div>
+                            <div class="example-files">🌐 YouTube URL</div>
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <!-- Video Section -->
+            <section id="video">
+                <h2>🎥 Video Funktionen</h2>
+
+                <!-- Video Concatenate -->
+                <article id="video-concat" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/v1/video/concatenate</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+                    <div class="endpoint-description">Fügt mehrere Videoclips nahtlos aneinander.</div>
+                    <div class="examples-grid">
+                        <div class="example-item" onclick="useExample('Füge diese Videos zusammen')">
+                            <div class="example-scenario">Videos verbinden</div>
+                            <div class="example-files">📎 clip1.mp4, clip2.mp4</div>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Subtitles -->
+                <article id="video-caption" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/v1/video/add/captions</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+                    <div class="endpoint-description">Fügt automatisch Untertitel (Captions) in das Video ein (Hardcoded
+                        oder SRT).</div>
+                    <div class="examples-grid">
+                        <div class="example-item" onclick="useExample('Erstelle Untertitel für dieses Video')">
+                            <div class="example-scenario">Untertitel generieren</div>
+                            <div class="example-command">"Erstelle Untertitel für dieses Video"</div>
+                            <div class="example-files">📎 video.mp4</div>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Video + Audio -->
+                <article id="video-audio" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/v1/video/add/audio</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+                    <div class="endpoint-description">Ersetzt oder mischt Audio in einem Video.</div>
+                    <div class="examples-grid">
+                        <div class="example-item" onclick="useExample('Tausche den Ton in diesem Video aus')">
+                            <div class="example-scenario">Audio austauschen</div>
+                            <div class="example-files">📎 video.mp4, new_sound.mp3</div>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Watermark -->
+                <article id="video-watermark" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/v1/video/add/watermark</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+                    <div class="endpoint-description">Fügt ein Bild als Wasserzeichen hinzu.</div>
+                    <div class="examples-grid">
+                        <div class="example-item"
+                            onclick="useExample('Füge dieses Logo als Wasserzeichen unten rechts hinzu')">
+                            <div class="example-scenario">Logo hinzufügen</div>
+                            <div class="example-files">📎 video.mp4, logo.png</div>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Tools -->
+                <article id="video-tools" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/v1/video/cut</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+                    <div class="endpoint-description">Schneidet ein Video (Start/Ende).</div>
+                    <div class="examples-grid">
+                        <div class="example-item" onclick="useExample('Schneide die ersten 5 Sekunden ab')">
+                            <div class="example-scenario">Video trimmen</div>
+                            <div class="example-command">"Schneide die ersten 5 Sekunden ab"</div>
+                            <div class="example-files">📎 video.mp4</div>
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <!-- Transcription Section -->
+            <section id="transcription">
+                <h2>📝 Transkription</h2>
+
+                <article id="transcribe" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/transcribe</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+                    <div class="endpoint-description">
+                        Erstellt Transkripte aus Video- oder Audiodateien. Unterstützt automatische Spracherkennung.
+                    </div>
+                    <div class="examples-grid">
+                        <div class="example-item" onclick="useExample('Transkribiere diese Datei auf Deutsch')">
+                            <div class="example-scenario">Meeting transkribieren</div>
+                            <div class="example-command">"Transkribiere auf Deutsch"</div>
+                            <div class="example-files">📎 meeting.mp3</div>
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <!-- Image Section -->
+            <section id="image">
+                <h2>🖼️ Bild Funktionen</h2>
+
+                <article id="image-video" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/v1/image/convert/video</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+                    <div class="endpoint-description">Erstellt ein Video aus einem Bild (Zoom/Pan Effekt).</div>
+                </article>
+
+                <article id="screenshot" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/v1/image/screenshot/webpage</span>
+                        <span class="badge badge-container">Container</span>
+                    </div>
+                    <div class="endpoint-description">Macht einen Screenshot von einer Webseite.</div>
+                </article>
+            </section>
+
+            <!-- Storage Section -->
+            <section id="storage">
+                <h2>☁️ Storage & Cloud</h2>
+
+                <article id="gdrive" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/gdrive-upload</span>
+                    </div>
+                    <div class="endpoint-description">Lädt eine Datei zu Google Drive hoch.</div>
+                    <div class="examples-grid">
+                        <div class="example-item" onclick="useExample('Lade diese Datei zu Google Drive hoch')">
+                            <div class="example-scenario">Backup erstellen</div>
+                            <div class="example-files">📎 backup.zip</div>
+                        </div>
+                    </div>
+                </article>
+
+                <article id="s3" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">POST</span>
+                        <span class="endpoint-path">/s3-upload</span>
+                        <span class="badge badge-container">Planned</span>
+                    </div>
+                    <div class="endpoint-description">Upload zu AWS S3 (Coming Soon).</div>
+                </article>
+            </section>
+
+            <!-- Toolkit Section -->
+            <section id="toolkit">
+                <h2>🛠️ Toolkit & Status</h2>
+
+                <article id="test" class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method">GET</span>
+                        <span class="endpoint-path">/v1/toolkit/test</span>
+                    </div>
+                    <div class="endpoint-description">Prüft ob das NCA Toolkit erreichbar ist.</div>
+                    <div class="examples-grid">
+                        <div class="example-item" onclick="useExample('Ist das System online?')">
+                            <div class="example-scenario">Status prüfen</div>
+                            <div class="example-command">"Ist das System online?"</div>
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <section
+                style="margin-top: 100px; padding: 40px; text-align: center; color: var(--text-muted); background: var(--bg-secondary); border-radius: 12px;">
+                <p>NCA Toolkit v2.0 • Build 2026.01.08</p>
+            </section>
+        </main>
+    </div>
+
+    <script src="docs-navigation.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCA Toolkit - Data Flow Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        h2 {
+            font-size: 1.2em;
+            color: #666;
+            margin-top: 0;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .status.unknown {
+            background: #eee;
+            color: #666;
+        }
+
+        .status.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status.loading {
+            background: #e0f2fe;
+            color: #075985;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 20px 0;
+            padding: 20px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .node {
+            text-align: center;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-weight: bold;
+            background: #fff;
+            width: 120px;
+        }
+
+        .arrow {
+            flex-grow: 1;
+            height: 2px;
+            background: #ddd;
+            position: relative;
+            margin: 0 10px;
+        }
+
+        .arrow::after {
+            content: '►';
+            position: absolute;
+            right: 0;
+            top: -7px;
+            color: #ddd;
+        }
+
+        .node.active {
+            border-color: #2563eb;
+            color: #2563eb;
+            background: #eff6ff;
+        }
+
+        .arrow.active {
+            background: #2563eb;
+        }
+
+        .arrow.active::after {
+            color: #2563eb;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Data Flow Test</h1>
+
+    <div class="card">
+        <h2>Architecture Visualization</h2>
+        <div class="flow-diagram">
+            <div id="node-frontend" class="node">Frontend<br>(Browser)</div>
+            <div id="arrow-1" class="arrow"></div>
+            <div id="node-backend" class="node">Backend<br>(Flask)</div>
+            <div id="arrow-2" class="arrow"></div>
+            <div id="node-docker" class="node">Docker<br>(NCA Toolkit)</div>
+        </div>
+        <p>This page tests if we can send data all the way from the Browser to the Docker container and back.</p>
+    </div>
+
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>1. Connection Health</h2>
+            <button onclick="checkHealth()" id="btn-health">Check Connectivity</button>
+        </div>
+        <div id="health-result" style="margin-top: 10px;"></div>
+    </div>
+
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>2. Data Transmission Test</h2>
+            <button onclick="sendData()" id="btn-send" disabled>Send Test Data</button>
+        </div>
+        <p>Sending a test request to <code>/v1/toolkit/test</code> (mock endpoint) or requesting tool list.</p>
+        <div id="data-result"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5000'; // Flask Backend
+
+        function setStatus(elementId, status, message) {
+            const el = document.getElementById(elementId);
+            el.innerHTML = `<div class="status ${status}">${message}</div>`;
+        }
+
+        function highlightFlow(stage) {
+            // Reset
+            document.querySelectorAll('.node, .arrow').forEach(el => el.classList.remove('active'));
+
+            if (stage >= 1) document.getElementById('node-frontend').classList.add('active');
+            if (stage >= 2) {
+                document.getElementById('arrow-1').classList.add('active');
+                document.getElementById('node-backend').classList.add('active');
+            }
+            if (stage >= 3) {
+                document.getElementById('arrow-2').classList.add('active');
+                document.getElementById('node-docker').classList.add('active');
+            }
+        }
+
+        async function checkHealth() {
+            const btn = document.getElementById('btn-health');
+            btn.disabled = true;
+            setStatus('health-result', 'loading', 'Checking /api/health...');
+            highlightFlow(1);
+
+            try {
+                const start = performance.now();
+                const response = await fetch(`${API_URL}/api/health`);
+                const data = await response.json();
+                const time = (performance.now() - start).toFixed(0);
+
+                if (data.status === 'healthy') {
+                    // Backend is there
+                    highlightFlow(2);
+
+                    if (data.nca_toolkit && data.nca_toolkit.status === 'healthy') {
+                        // Docker is there
+                        highlightFlow(3);
+                        setStatus('health-result', 'success', `
+                            <strong>Success!</strong><br>
+                            Backend: ${time}ms<br>
+                            Docker: Connected
+                        `);
+                        document.getElementById('btn-send').disabled = false;
+                    } else {
+                        // Backend yes, Docker no
+                        setStatus('health-result', 'warning', `
+                            <strong>Partial Success</strong><br>
+                            Backend: Connected (${time}ms)<br>
+                            Docker: Unreachable
+                        `);
+                        // Enable anyway to try
+                        document.getElementById('btn-send').disabled = false;
+                    }
+                } else {
+                    throw new Error('Backend returned unhealthy');
+                }
+            } catch (e) {
+                console.error(e);
+                setStatus('health-result', 'error', `Failed: ${e.message}. Is Flask server running?`);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function sendData() {
+            const btn = document.getElementById('btn-send');
+            const resultDiv = document.getElementById('data-result');
+            btn.disabled = true;
+            resultDiv.innerHTML = '<div class="status loading">Sending data...</div>';
+            highlightFlow(1);
+
+            try {
+                // We typically send to /api/proxy with an endpoint
+                // Let's try to list tools or just ping
+                const payload = {
+                    endpoint: '/v1/toolkit/test',
+                    params: {
+                        message: 'Hello from Frontend',
+                        timestamp: new Date().toISOString()
+                    }
+                };
+
+                highlightFlow(2); // Sending to Flask
+
+                const response = await fetch(`${API_URL}/api/proxy`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    highlightFlow(3); // Flask talked to Docker (or logic)
+                    resultDiv.innerHTML = `
+                        <div class="status success">Data Received Back!</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="status error">Error from Backend</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+
+            } catch (e) {
+                resultDiv.innerHTML = `<div class="status error">Network Error: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+
+</html>

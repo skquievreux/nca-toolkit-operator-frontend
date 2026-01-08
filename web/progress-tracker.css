@@ -1,0 +1,139 @@
+/* Progress Tracker Styles */
+.progress-tracker {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+}
+
+.progress-tracker-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.progress-tracker-title {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.progress-tracker-percentage {
+    margin-left: auto;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.progress-bar-container {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    height: 8px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.progress-bar {
+    background: linear-gradient(90deg, var(--primary-color), #10b981);
+    height: 100%;
+    transition: width 0.3s ease;
+    border-radius: 8px;
+}
+
+.progress-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.progress-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    transition: all 0.3s ease;
+}
+
+.progress-step.active {
+    background: rgba(59, 130, 246, 0.1);
+    border-left: 3px solid var(--primary-color);
+}
+
+.progress-step.completed {
+    background: rgba(16, 185, 129, 0.1);
+    border-left: 3px solid #10b981;
+}
+
+.progress-step.error {
+    background: rgba(239, 68, 68, 0.1);
+    border-left: 3px solid #ef4444;
+}
+
+.progress-step-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.progress-step.pending .progress-step-icon {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+}
+
+.progress-step.active .progress-step-icon {
+    background: var(--primary-color);
+    color: white;
+    animation: pulse 2s infinite;
+}
+
+.progress-step.completed .progress-step-icon {
+    background: #10b981;
+    color: white;
+}
+
+.progress-step.error .progress-step-icon {
+    background: #ef4444;
+    color: white;
+}
+
+.progress-step-content {
+    flex: 1;
+}
+
+.progress-step-title {
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 4px;
+}
+
+.progress-step-message {
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+.progress-step-time {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-left: auto;
+}

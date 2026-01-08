@@ -1,6 +1,7 @@
 services:
   nca-toolkit:
     image: stephengpope/no-code-architects-toolkit:latest
+    pull_policy: never
     container_name: nca-toolkit-mcp
     ports:
       - "${HOST_PORT:-8080}:${CONTAINER_PORT:-8080}"

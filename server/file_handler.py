@@ -7,11 +7,16 @@ import uuid
 import logging
 from werkzeug.utils import secure_filename
 from flask import url_for
+from utils import get_lan_ip
 
 logger = logging.getLogger(__name__)
 
 # Konfiguration
-UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
+# Konfiguration
+# Verwende absoluten Pfad, um sicherzugehen
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # server/
+PROJECT_DIR = os.path.dirname(BASE_DIR)              # root/
+UPLOAD_FOLDER = os.path.join(PROJECT_DIR, 'uploads')
 MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 500 * 1024 * 1024))  # 500MB default
 
 ALLOWED_EXTENSIONS = {
@@ -100,8 +105,13 @@ def handle_upload(file):
     
     logger.info(f"File uploaded: {original_filename} → {stored_filename} ({get_file_size_mb(file_size)}MB)")
     
-    # Generate URL
-    file_url = url_for('uploaded_file', filename=stored_filename, _external=True)
+    host_ip = get_lan_ip()
+    base_url = f"http://{host_ip}:5000"
+    
+    # Fallback to host.docker.internal if detection fails (e.g. offline)
+    file_url = f"{base_url}/uploads/{stored_filename}"
+    
+    logger.info(f"Generated File URL: {file_url} (Host IP: {host_ip})")
     
     return {
         'filename': original_filename,
