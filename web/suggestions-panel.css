@@ -1,0 +1,543 @@
+/**
+ * Suggestions Panel Styles
+ * Smart UI for displaying file analysis and action suggestions
+ *
+ * @version 1.0.0
+ * @author NCA Toolkit Team
+ */
+
+/* ===== Suggestions Panel Container ===== */
+.suggestions-panel {
+    background: var(--card-bg, #1e293b);
+    border: 1px solid var(--border-color, #334155);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== Header ===== */
+.suggestions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.suggestions-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: var(--text-primary, #f1f5f9);
+}
+
+.suggestions-title .icon {
+    width: 20px;
+    height: 20px;
+    stroke: var(--primary-color, #6366f1);
+}
+
+.btn-clear-files {
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+.btn-clear-files:hover {
+    opacity: 1;
+}
+
+/* ===== File Summary ===== */
+.file-summary-list {
+    font-size: 0.9em;
+    color: var(--text-muted, #94a3b8);
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--bg-secondary, #0f172a);
+    border-radius: 8px;
+}
+
+.file-summary-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.file-summary-item .file-icon {
+    font-size: 1.2em;
+    flex-shrink: 0;
+}
+
+.file-summary-item .file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary, #f1f5f9);
+    font-weight: 500;
+}
+
+.file-summary-item .file-meta {
+    flex-shrink: 0;
+    font-size: 0.85em;
+    color: var(--text-muted, #94a3b8);
+}
+
+/* ===== Warnings ===== */
+.suggestions-warnings {
+    margin-bottom: 16px;
+}
+
+.warning-item {
+    display: flex;
+    align-items: start;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(251, 191, 36, 0.1);
+    border-left: 3px solid #fbbf24;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.warning-item.error {
+    background: rgba(239, 68, 68, 0.1);
+    border-left-color: #ef4444;
+}
+
+.warning-icon {
+    font-size: 1.2em;
+    flex-shrink: 0;
+}
+
+.warning-content {
+    flex: 1;
+}
+
+.warning-message {
+    color: var(--text-primary, #f1f5f9);
+    font-weight: 500;
+}
+
+/* ===== Primary Suggestion ===== */
+.primary-suggestion {
+    margin-bottom: 16px;
+}
+
+.suggestion-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--text-muted, #94a3b8);
+}
+
+.suggestion-header .suggestion-icon {
+    font-size: 1.2em;
+}
+
+.suggestion-card {
+    border: 2px solid var(--border-color, #334155);
+    border-radius: 10px;
+    padding: 16px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    background: var(--card-bg, #1e293b);
+}
+
+.suggestion-card:hover {
+    border-color: var(--primary-color, #6366f1);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+    transform: translateY(-2px);
+}
+
+.suggestion-card.primary {
+    border-color: var(--primary-color, #6366f1);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
+}
+
+.suggestion-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.suggestion-icon-large {
+    font-size: 2em;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary, #0f172a);
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+.suggestion-card-info {
+    flex: 1;
+}
+
+.suggestion-title {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: var(--text-primary, #f1f5f9);
+    margin-bottom: 4px;
+}
+
+.suggestion-description {
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.9em;
+    margin-bottom: 12px;
+}
+
+.suggestion-reason {
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.85em;
+    margin-bottom: 8px;
+    padding: 8px;
+    background: var(--bg-secondary, #0f172a);
+    border-radius: 6px;
+}
+
+.suggestion-warning {
+    color: #fbbf24;
+    font-size: 0.85em;
+    margin-bottom: 12px;
+    padding: 8px;
+    background: rgba(251, 191, 36, 0.1);
+    border-radius: 6px;
+}
+
+.suggestion-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* ===== Badges ===== */
+.confidence-badge,
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.75em;
+}
+
+.confidence-badge {
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+}
+
+.confidence-badge.medium {
+    background: rgba(251, 191, 36, 0.1);
+    color: #fbbf24;
+}
+
+.confidence-badge.low {
+    background: rgba(156, 163, 175, 0.1);
+    color: #9ca3af;
+}
+
+.badge-warning {
+    background: rgba(251, 191, 36, 0.1);
+    color: #fbbf24;
+}
+
+/* ===== Action Buttons ===== */
+.suggestion-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-execute {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--primary-color, #6366f1);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-execute:hover {
+    background: var(--primary-hover, #4f46e5);
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.btn-execute:active {
+    transform: scale(0.98);
+}
+
+.btn-execute svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ===== Secondary Suggestions ===== */
+.secondary-suggestions {
+    border-top: 1px solid var(--border-color, #334155);
+    padding-top: 16px;
+}
+
+.secondary-suggestions h4 {
+    font-size: 0.9em;
+    color: var(--text-muted, #94a3b8);
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.suggestion-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-secondary, #0f172a);
+    border: 1px solid var(--border-color, #334155);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.suggestion-item:hover {
+    background: var(--bg-hover, #1e293b);
+    border-color: var(--primary-color, #6366f1);
+    transform: translateX(4px);
+}
+
+.suggestion-item-icon {
+    font-size: 1.5em;
+    flex-shrink: 0;
+}
+
+.suggestion-item-content {
+    flex: 1;
+}
+
+.suggestion-item-title {
+    font-weight: 600;
+    color: var(--text-primary, #f1f5f9);
+    margin-bottom: 2px;
+}
+
+.suggestion-item-desc {
+    font-size: 0.85em;
+    color: var(--text-muted, #94a3b8);
+}
+
+.suggestion-item svg {
+    width: 20px;
+    height: 20px;
+    stroke: var(--text-muted, #94a3b8);
+    flex-shrink: 0;
+}
+
+/* ===== Loading State ===== */
+.suggestions-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    gap: 12px;
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border-color, #334155);
+    border-top-color: var(--primary-color, #6366f1);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.suggestions-loading span {
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.9em;
+}
+
+/* ===== No Suggestions State ===== */
+.no-suggestions {
+    text-align: center;
+    padding: 32px 16px;
+}
+
+.no-suggestions-icon {
+    font-size: 3em;
+    margin-bottom: 12px;
+}
+
+.no-suggestions h3 {
+    color: var(--text-primary, #f1f5f9);
+    margin-bottom: 8px;
+    font-size: 1.1em;
+}
+
+.no-suggestions p {
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.9em;
+}
+
+/* ===== Error State ===== */
+.suggestions-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+    gap: 12px;
+}
+
+.error-icon {
+    font-size: 2.5em;
+}
+
+.error-message {
+    color: #ef4444;
+    text-align: center;
+    font-weight: 500;
+}
+
+/* ===== Responsive Design ===== */
+@media (max-width: 768px) {
+    .suggestions-panel {
+        padding: 12px;
+    }
+
+    .suggestion-card {
+        padding: 12px;
+    }
+
+    .suggestion-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .suggestion-icon-large {
+        width: 40px;
+        height: 40px;
+        font-size: 1.5em;
+    }
+
+    .suggestion-title {
+        font-size: 1em;
+    }
+
+    .suggestion-actions {
+        flex-direction: column;
+    }
+
+    .btn-execute {
+        width: 100%;
+    }
+
+    .file-summary-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
+    .file-summary-item .file-meta {
+        font-size: 0.8em;
+    }
+}
+
+/* ===== Tablet ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .suggestions-panel {
+        max-width: 90%;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+/* ===== Desktop ===== */
+@media (min-width: 1025px) {
+    .suggestions-panel {
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+/* ===== Accessibility ===== */
+.btn-execute:focus,
+.suggestion-item:focus,
+.suggestion-card:focus {
+    outline: 2px solid var(--primary-color, #6366f1);
+    outline-offset: 2px;
+}
+
+/* ===== Animation Utilities ===== */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.suggestion-item,
+.warning-item {
+    animation: slideUp 0.2s ease;
+}
+
+/* ===== Dark Mode Enhancements ===== */
+@media (prefers-color-scheme: dark) {
+    .suggestions-panel {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .suggestion-card.primary {
+        box-shadow: 0 0 20px rgba(99, 102, 241, 0.1);
+    }
+}
