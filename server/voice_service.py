@@ -72,6 +72,7 @@ def text_to_speech(text, voice_id="Adam", output_filename="speech.mp3"):
         return {
             "status": "success",
             "file_url": file_url,
+            "url": file_url,
             "filename": output_filename
         }
     except Exception as e:

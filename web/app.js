@@ -998,8 +998,10 @@ if (logsBtn) {
 // Initialize Version
 const versionInfo = document.getElementById('versionInfo');
 if (versionInfo && typeof APP_VERSION !== 'undefined') {
-    versionInfo.innerHTML = `v${APP_VERSION.version} <span style="opacity: 0.5">(${APP_VERSION.commit.substring(0, 7)})</span>`;
-    versionInfo.title = `Build: ${APP_VERSION.buildTime}`;
+    // Robust parsing: Take first word (hash), then first 7 chars
+    const shortHash = (APP_VERSION.commit || '').split(' ')[0].substring(0, 7);
+    versionInfo.innerHTML = `v${APP_VERSION.version} <span style="opacity: 0.5">(${shortHash})</span>`;
+    versionInfo.title = `Build: ${APP_VERSION.buildTime}\nCommit: ${APP_VERSION.commit}`;
 }
 
 // Reset to Landing Page
