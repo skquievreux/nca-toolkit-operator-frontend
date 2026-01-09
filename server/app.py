@@ -14,6 +14,7 @@ import datetime
 import logging
 import threading
 from werkzeug.utils import secure_filename
+from swagger_helper import generate_swagger_spec, SWAGGER_HTML
 from dotenv import load_dotenv
 
 # Load environment variables early
@@ -619,6 +620,16 @@ def process_job_async(job_id, user_message, conversation_id, uploaded_files):
             'statusMessage': str(e)
         })
 
+@app.route('/docs')
+def swagger_ui():
+    """Serves the Swagger UI"""
+    return SWAGGER_HTML
+
+@app.route('/swagger.json')
+def swagger_spec():
+    """Serves the OpenAPI Spec"""
+    return jsonify(generate_swagger_spec())
+
 @app.route('/api/process', methods=['POST'])
 def process_request():
     """Haupt-Endpunkt: Asynchron"""
@@ -765,7 +776,7 @@ def call_nca_api(endpoint, params):
         endpoint = '/transcribe'
     if endpoint == '/v1/video/concatenate':
         endpoint = '/combine-videos'
-    if endpoint == '/v1/video/add/captions' or endpoint == '/v1/video/captions':
+    if endpoint == '/v1/video/add/captions' or endpoint == '/v1/video/captions' or endpoint == '/v1/video/caption':
         endpoint = '/v1/video/add/captions'
     if endpoint == '/v1/video/add/watermark':
         endpoint = '/v1/video/add/watermark'
@@ -819,6 +830,49 @@ def call_nca_api(endpoint, params):
                       logger.error(f"Local Website Screenshot Failed: {e}")
                       # Fallback to container if local fails? No, container doesn't have it.
                       raise Exception(f"Website Screenshot Error: {e}")
+
+    # ---------------------------------------------------------
+    # INTERCEPT: Local Image to Video (Slideshow)
+    # ---------------------------------------------------------
+    if endpoint == '/v1/image/convert/image_to_video' and local_processor.check_local_ffmpeg():
+        logger.info("🚀 LOCAL OVERRIDE: Creating video from image locally")
+        image_url = params.get('image_url')
+        duration = params.get('duration', 5)
+        try:
+             return local_processor.create_video_from_image(image_url, duration)
+        except Exception as e:
+             logger.error(f"Local Slideshow Failed: {e}")
+             raise Exception(f"Slideshow Error: {e}")
+
+    # ---------------------------------------------------------
+    # INTERCEPT: Voice Generation (ElevenLabs)
+    # ---------------------------------------------------------
+    if endpoint == '/v1/voice/generate':
+        import voice_service
+        logger.info("🚀 LOCAL OVERRIDE: Generating Speech with ElevenLabs")
+        text = params.get('text')
+        voice = params.get('voice_id', 'Adam')
+        try:
+             # Generates file locally in UPLOAD_FOLDER
+             result = voice_service.text_to_speech(text, voice_id=voice)
+             # Result is dict { 'file_url': ... }
+             return result
+        except Exception as e:
+             logger.error(f"Voice Generation Failed: {e}")
+             raise Exception(f"Voice Error: {e}")
+
+    # ---------------------------------------------------------
+    # INTERCEPT: Video Download (YouTube)
+    # ---------------------------------------------------------
+    if endpoint == '/v1/video/download':
+        from youtube_service import download_youtube_video
+        logger.info("🚀 LOCAL OVERRIDE: Downloading Video")
+        url = params.get('url')
+        try:
+             return download_youtube_video(url)
+        except Exception as e:
+             logger.error(f"Download Failed: {e}")
+             raise Exception(f"Download Error: {e}")
 
     # ---------------------------------------------------------
     # CALL NCA API WITH SAFE WRAPPER

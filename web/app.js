@@ -81,7 +81,7 @@ function handleDrop(e) {
 
     // 🆕 Trigger smart detection
     if (window.oneClickWorkflows) {
-        window.oneClickWorkflows.handleFileDrop(files);
+        window.oneClickWorkflows.handleFileDrop(state.attachedFiles);
     }
 }
 
@@ -520,8 +520,10 @@ function handleFileSelect(event) {
 
     // 🆕 Trigger smart detection
     if (window.oneClickWorkflows) {
-        window.oneClickWorkflows.handleFileDrop(files);
+        window.oneClickWorkflows.handleFileDrop(state.attachedFiles);
     }
+
+
 }
 
 function removeFile(index) {

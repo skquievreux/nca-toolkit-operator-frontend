@@ -281,3 +281,49 @@ def create_video_from_image_and_audio(image_url, audio_url):
     except Exception as e:
         logger.exception("Recap video creation failed")
         raise e
+
+def create_video_from_image(image_url, duration=5):
+    """
+    Erstellt ein Video aus einem Bild (Slideshow/Loop).
+    """
+    image_path = url_to_path(image_url)
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Image file not found: {image_path}")
+
+    output_filename = f"slideshow_{uuid.uuid4().hex[:8]}.mp4"
+    output_path = os.path.join(UPLOAD_FOLDER, output_filename)
+    
+    # ffmpeg -loop 1 -i image.jpg -t <duration> -c:v libx264 -pix_fmt yuv420p -vf scale=1920:-2 output.mp4
+    # Added scale to ensure even dimensions (required by libx264)
+    cmd = [
+        'ffmpeg', '-y',
+        '-loop', '1',
+        '-i', image_path,
+        '-t', str(duration),
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', 
+        output_path
+    ]
+    
+    logger.debug(f"🎬 Creating video from image: {' '.join(cmd)}")
+    
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            logger.error(f"FFmpeg Error: {result.stderr}")
+            raise Exception(f"Video-Erstellung fehlgeschlagen: {result.stderr[:200]}")
+            
+        file_size = os.path.getsize(output_path)
+        file_url = f"http://{HOST_IP}:5000/uploads/{output_filename}"
+        
+        return {
+             'filename': output_filename,
+             'url': file_url,
+             'type': 'mp4',
+             'size': file_size,
+             'source': 'local_ffmpeg_slideshow'
+        }
+    except Exception as e:
+        logger.exception("Slideshow creation failed")
+        raise e
