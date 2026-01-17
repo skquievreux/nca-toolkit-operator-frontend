@@ -1,0 +1,12 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: nca-toolkit-operator-frontend
+  description: |
+    Das Frontend, das auf dem NCL Toolkit aufbaut, erweitert dieses um einige Funktionen.
+  annotations:
+    github.com/project-slug: skquievreux/nca-toolkit-operator-frontend
+spec:
+  type: service
+  lifecycle: experimental
+  owner: guests
