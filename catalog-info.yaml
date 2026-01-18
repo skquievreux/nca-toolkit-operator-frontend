@@ -6,6 +6,7 @@ metadata:
     Das Frontend, das auf dem NCL Toolkit aufbaut, erweitert dieses um einige Funktionen.
   annotations:
     github.com/project-slug: skquievreux/nca-toolkit-operator-frontend
+    backstage.io/techdocs-ref: dir:.
 spec:
   type: service
   lifecycle: experimental
