@@ -1,9 +1,3 @@
-# nca-toolkit-operator-frontend
+# Documentation
 
-Das Frontend, das auf dem NCL Toolkit aufbaut, erweitert dieses um einige Funktionen.
-
-## Overview
-This documentation was automatically scaffolded by Backstage.
-
-## Getting Started
-Add your documentation here.
+Welcome to the documentation for MCP-NCA-TOOLKIT.
