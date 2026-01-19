@@ -10,14 +10,14 @@ nav:
     - Decisions: 01-architecture/decisions/
   - Implementation:
     - Overview: 02-implementation/index.md
-    - Smart Frontend Konzept: docs/02-implementation/SMART-FRONTEND-KONZEPT.md
+    - Smart Frontend Konzept: 02-implementation/SMART-FRONTEND-KONZEPT.md
   - Operations:
     - Overview: 03-operations/index.md
 
   - Business:
     - Overview: 04-business/index.md
-    - Business Case: docs/04-business/BUSINESS-CASE.md
-    - Technologie Vergleich: docs/04-business/TECHNOLOGIE-VERGLEICH.md
+    - Business Case: 04-business/BUSINESS-CASE.md
+    - Technologie Vergleich: 04-business/TECHNOLOGIE-VERGLEICH.md
     - History: 04-business/history/
   - Reference:
     - Overview: 05-reference/index.md
