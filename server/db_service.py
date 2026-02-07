@@ -116,12 +116,24 @@ def get_job(job_id):
     """Retrieves a single job"""
     return db.job.find_unique(where={'id': job_id})
 
-def get_all_jobs(limit=100):
-    """Retrieves recent jobs"""
-    return db.job.find_many(
-        order={'createdAt': 'desc'},
-        take=limit
-    )
+def get_all_jobs(limit=100, status=None):
+    """Retrieves recent jobs, optionally filtered by status"""
+    args = {
+        'order': {'createdAt': 'desc'},
+        'take': limit
+    }
+    
+    if status:
+        if isinstance(status, list):
+            args['where'] = {'status': {'in': status}}
+        else:
+            args['where'] = {'status': status}
+            
+    return db.job.find_many(**args)
+
+def delete_job(job_id):
+    """Deletes a job"""
+    return db.job.delete(where={'id': job_id})
 
 def save_asset(file_info):
     """Saves an asset record from handle_upload result"""
@@ -140,6 +152,17 @@ def get_asset_by_hash(file_hash):
     return db.asset.find_unique(
         where={'hash': file_hash}
     )
+
+def delete_jobs(status=None):
+    """Deletes multiple jobs, optionally filtered by status"""
+    args = {}
+    if status:
+        if isinstance(status, list):
+            args['where'] = {'status': {'in': status}}
+        else:
+            args['where'] = {'status': status}
+            
+    return db.job.delete_many(**args)
 
 def get_history(limit=50):
     """Retrieves recent conversations and messages"""

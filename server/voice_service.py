@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 
-# Common Voice IDs
+# Common Voice IDs (Fallback)
 VOICE_MAPPING = {
     "Adam": "pNInz6obpgDQGcFmaJgB",
     "Antoni": "ErXwobaYiN019PkySvjV",
@@ -18,23 +18,51 @@ VOICE_MAPPING = {
     "Sam": "yoZ06aMxZJJ28mfd3POQ"
 }
 
+def get_available_voices():
+    """
+    Fetches the list of available voices from ElevenLabs.
+    """
+    api_key = os.getenv('ELEVENLABS_API_KEY', '')
+    if not api_key:
+        # Return fallback mapping if no API key
+        return [{"name": name, "voice_id": vid, "category": "fallback"} for name, vid in VOICE_MAPPING.items()]
+
+    url = "https://api.elevenlabs.io/v1/voices"
+    headers = {"xi-api-key": api_key}
+    
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        voices_data = response.json().get('voices', [])
+        
+        # Format for frontend
+        return [{
+            "name": v.get('name'),
+            "voice_id": v.get('voice_id'),
+            "category": v.get('category'),
+            "preview_url": v.get('preview_url')
+        } for v in voices_data]
+    except Exception as e:
+        logger.error(f"Failed to fetch ElevenLabs voices: {e}")
+        # Return fallbacks on error
+        return [{"name": name, "voice_id": vid, "category": "fallback"} for name, vid in VOICE_MAPPING.items()]
+
 def text_to_speech(text, voice_id="Adam", output_filename="speech.mp3"):
     """
     Converts text to speech using ElevenLabs API.
     """
-    # Fetch key at runtime to ensure env vars are loaded
+    logger.info(f"🎤 Starting TTS for text: {text[:50]}... using voice: {voice_id}")
+    
     api_key = os.getenv('ELEVENLABS_API_KEY', '')
     
     if not api_key:
         logger.warning(f"ELEVENLABS_API_KEY not found in environment. Keys found: {[k for k in os.environ.keys() if 'API' in k]}")
         return {"status": "mock", "message": "TTS simulated because API key is missing"}
 
-    # Resolve Voice ID if it's a name
-    if voice_id in VOICE_MAPPING:
-        voice_id = VOICE_MAPPING[voice_id]
-
-
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    # Map voice name to ID if it's a known name, otherwise assume it's already an ID
+    voice = VOICE_MAPPING.get(voice_id, voice_id)
+    
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}"
     
     headers = {
         "Accept": "audio/mpeg",

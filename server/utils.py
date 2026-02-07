@@ -11,6 +11,7 @@ def get_lan_ip():
     try:
         # Connect to an external DB (doesn't send data) to get the preferred interface IP
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(1.0)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()

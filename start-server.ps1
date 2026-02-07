@@ -14,9 +14,10 @@ if ($existingProcesses) {
     Write-Host "`nOptionen:" -ForegroundColor Cyan
     Write-Host "  1) Bestehenden Server nutzen" -ForegroundColor Green
     Write-Host "  2) Server neu starten" -ForegroundColor Yellow
-    Write-Host "  3) Abbrechen" -ForegroundColor Red
+    Write-Host "  3) Server stoppen" -ForegroundColor Red
+    Write-Host "  4) Abbrechen" -ForegroundColor Gray
     
-    $choice = Read-Host "`nWählen Sie (1-3)"
+    $choice = Read-Host "`nWählen Sie (1-4)"
     
     switch ($choice) {
         "1" {
@@ -26,12 +27,30 @@ if ($existingProcesses) {
             exit 0
         }
         "2" {
-            Write-Host "`n🛑 Stoppe alle Server..." -ForegroundColor Yellow
-            $existingProcesses | Stop-Process -Force
+            Write-Host "`n🛑 Versuche sanften Shutdown..." -ForegroundColor Yellow
+            try {
+                $null = Invoke-RestMethod -Method Post -Uri "http://localhost:5000/api/admin/shutdown" -TimeoutSec 2 -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+            }
+            catch {}
+            
+            Write-Host "🛑 Stoppe restliche Prozesse..." -ForegroundColor Yellow
+            $existingProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 2
             Write-Host "✅ Server gestoppt!" -ForegroundColor Green
         }
         "3" {
+            Write-Host "`n🛑 Stoppe Server..." -ForegroundColor Yellow
+            try {
+                $null = Invoke-RestMethod -Method Post -Uri "http://localhost:5000/api/admin/shutdown" -TimeoutSec 2 -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+            }
+            catch {}
+            $existingProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
+            Write-Host "✅ Server beendet." -ForegroundColor Green
+            exit 0
+        }
+        "4" {
             Write-Host "`n👋 Abgebrochen" -ForegroundColor Gray
             exit 0
         }
@@ -113,12 +132,12 @@ if (-not (Test-Path "server\app.py")) {
 
 Set-Location server
 
-# Starte in neuem Fenster (damit er im Hintergrund läuft)
-Start-Process powershell -ArgumentList "-NoExit", "-Command", ".\venv\Scripts\python.exe app.py" -WindowStyle Normal
+# Starte in neuem Fenster mit Fehler-Pause
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "& { .\venv\Scripts\python.exe app.py; if (`$LASTEXITCODE -ne 0) { Write-Host '❌ Server Crash!' -ForegroundColor Red; Read-Host 'Press Enter...' } }" -WindowStyle Normal
 
 # Warte bis Server bereit ist
 Write-Host "`n⏳ Warte auf Server..." -ForegroundColor Yellow
-$maxAttempts = 10
+$maxAttempts = 30
 $attempt = 0
 
 while ($attempt -lt $maxAttempts) {

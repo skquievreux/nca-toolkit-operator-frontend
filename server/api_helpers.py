@@ -130,43 +130,73 @@ def safe_api_call(
     }
 
 
-def validate_params(endpoint: str, params: Dict[str, Any]) -> Optional[str]:
-    """
-    Validiert Parameter für einen Endpunkt.
-    
-    Args:
-        endpoint: API-Endpunkt
-        params: Parameter-Dictionary
-        
-    Returns:
-        None wenn OK, sonst Fehlermeldung
-    """
-    
-    # Definiere erforderliche Parameter pro Endpunkt
-    required_params = {
-        '/audio-mixing': ['video_url', 'audio_url'],
-        '/v1/video/add/audio': ['video_url', 'audio_url'],
-        '/combine-videos': ['media_urls'],
-        '/v1/video/concatenate': ['video_urls'],
-        '/media-to-mp3': ['media_url'],
-        '/v1/media/convert/mp3': ['media_url'],
-        '/transcribe': ['media_url'],
-        '/v1/media/transcribe': ['media_url'],
-        '/gdrive-upload': ['file_url'],
+# ============================================================================
+# CENTRALIZED SCHEMA REGISTRY & VALIDATION
+# ============================================================================
+
+NCA_SCHEMA = {
+    '/v1/media/transcribe': {
+        'required': ['media_url'],
+        'aliases': {'url': 'media_url', 'video_url': 'media_url', 'audio_url': 'media_url', 'file_url': 'media_url'}
+    },
+    '/transcribe': { # Legacy support
+        'required': ['media_url'],
+        'aliases': {'url': 'media_url', 'video_url': 'media_url', 'audio_url': 'media_url'}
+    },
+    '/audio-mixing': {
+        'required': ['video_url', 'audio_url'],
+        'aliases': {'media_url': 'video_url'} # Fallback mapping
+    },
+    '/v1/video/add/audio': {
+        'required': ['video_url', 'audio_url'],
+        'aliases': {'media_url': 'video_url'}
+    },
+    '/v1/image/convert/image_to_video': {
+        'required': ['image_url'],
+        'aliases': {'url': 'image_url', 'media_url': 'image_url'}
+    },
+    '/v1/video/download': {
+        'required': ['url'],
+        'aliases': {'video_url': 'url', 'media_url': 'url'}
+    },
+    '/api/rss/process': {
+        'required': ['image_url', 'audio_url'],
+        'aliases': {}
     }
-    
-    if endpoint not in required_params:
-        return None  # Keine Validierung für unbekannte Endpunkte
-    
-    missing = []
-    for param in required_params[endpoint]:
-        if param not in params or not params[param]:
-            missing.append(param)
-    
+}
+
+def validate_and_map_params(endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validiert Parameter gegen das Schema und mappt Aliase automatisch.
+    Führt zu einem robusten Backend, das LLM-Varianz verzeiht.
+    """
+    if endpoint not in NCA_SCHEMA:
+        logger.debug(f"ℹ️ No schema for endpoint {endpoint}, passing as-is")
+        return params
+
+    schema = NCA_SCHEMA[endpoint]
+    mapped_params = params.copy()
+
+    # 1. Alias-Mapping
+    for alias, target in schema.get('aliases', {}).items():
+        if alias in mapped_params and target not in mapped_params:
+            mapped_params[target] = mapped_params[alias]
+            logger.debug(f"🔗 Mapped alias: {alias} -> {target}")
+
+    # 2. Pflichtfeld-Check
+    missing = [p for p in schema.get('required', []) if p not in mapped_params or not mapped_params[p]]
     if missing:
-        return f"Fehlende Parameter: {', '.join(missing)}"
-    
-    return None
+        raise ValueError(f"❌ Missing required parameters for {endpoint}: {', '.join(missing)}")
+
+    return mapped_params
+
+def validate_params(endpoint: str, params: Dict[str, Any]) -> Optional[str]:
+    """Legacy wrapper for compatibility"""
+    try:
+        validate_and_map_params(endpoint, params)
+        return None
+    except ValueError as e:
+        return str(e)
 
 
 # ============================================================================

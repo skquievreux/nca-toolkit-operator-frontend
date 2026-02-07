@@ -4,6 +4,7 @@ Intelligente Intent-Erkennung und Parameter-Extraktion
 """
 
 import google.generativeai as genai
+import requests
 import json
 import os
 import logging
@@ -24,100 +25,18 @@ def configure_gemini():
 configure_gemini()
 
 # System Prompt
-SYSTEM_PROMPT = """Du bist ein API-Parameter-Extractor für das NCA Toolkit.
-
-Verfügbare APIs:
-
-1. /v1/video/add/audio - Fügt Audio zu Video hinzu
-   Parameter: video_url (string), audio_url (string)
-
-2. /v1/media/transcribe - Transkribiert Audio/Video
-   Parameter: media_url (string), language (string, default: "de")
-
-3. /v1/image/screenshot/webpage - Screenshot einer Webseite
-   Parameter: url (string), viewport_width (int, default: 1920), viewport_height (int, default: 1080)
-
-4. /v1/media/convert/mp3 - Konvertiert zu MP3
-   Parameter: media_url (string)
-
-5. /v1/video/concatenate - Fügt Videos zusammen
-   Parameter: video_urls (array of strings)
-
-6. /v1/toolkit/test - API-Test
-   Parameter: keine
-
-Aufgabe:
-1. Analysiere die User-Nachricht
-2. Erkenne die Absicht
-3. Wähle den passenden API-Endpunkt
-4. Extrahiere Parameter aus der Nachricht
-5. Gib JSON zurück
-
-WICHTIG:
-- Wenn Dateien hochgeladen wurden, nutze die file_urls
-- Wenn URLs in der Nachricht sind, extrahiere sie
-- KEINE halluzinierten Parameter! Wenn ein Parameter fehlt, gib `endpoint: null` zurück.
-- Erfinde KEINE Endpoints. Nutze NUR die oben gelisteten.
-- Gib confidence zwischen 0 und 1 an.
-
-Antwort-Format (JSON):
-{
-  "endpoint": "/v1/...",
-  "params": {
-    "param1": "value1"
-  },
-  "confidence": 0.95,
-  "reasoning": "Kurze Erklärung oder FEHLERGRUND wenn endpoint null"
-}
-
-Beispiele:
-
-User: "Füge https://example.com/video.mp4 und https://example.com/audio.mp3 zusammen"
-Antwort:
-{
-  "endpoint": "/v1/video/add/audio",
-  "params": {
-    "video_url": "https://example.com/video.mp4",
-    "audio_url": "https://example.com/audio.mp3"
-  },
-  "confidence": 0.98,
-  "reasoning": "Klare Absicht: Video und Audio zusammenfügen"
-}
-
-User: "Transkribiere dieses Video" (mit hochgeladener Datei video.mp4)
-Antwort:
-{
-  "endpoint": "/v1/media/transcribe",
-  "params": {
-    "media_url": "USE_UPLOADED_FILE_0",
-    "language": "de"
-  },
-  "confidence": 0.95,
-  "reasoning": "Transkription gewünscht, deutsche Sprache angenommen"
-}
-
-User: "Screenshot von https://github.com"
-Antwort:
-{
-  "endpoint": "/v1/image/screenshot/webpage",
-  "params": {
-    "url": "https://github.com",
-    "viewport_width": 1920,
-    "viewport_height": 1080
-  },
-  "confidence": 0.97,
-  "reasoning": "Screenshot-Anfrage mit URL"
-}
-"""
+# System Prompt is now dynamically generated via endpoint_discovery.py
+# This ensures ZOT (Single Source of Truth)
 
 
-def extract_intent_and_params(user_message, uploaded_files=None):
+def extract_intent_and_params(user_message, uploaded_files=None, language=None):
     """
     Nutzt Gemini LLM um Intent und Parameter zu extrahieren
     
     Args:
         user_message: User-Nachricht
         uploaded_files: Liste von {filename, url, type, size}
+        language: Optionaler Sprach-Hint (z.B. 'de', 'en')
     
     Returns:
         {
@@ -138,8 +57,9 @@ def extract_intent_and_params(user_message, uploaded_files=None):
     
     try:
         # Build context
-        context = f"User-Nachricht: {user_message}\n"
-        
+        if language:
+            context += f"Bevorzugte Sprache: {language}\n"
+            
         if uploaded_files:
             context += f"\nHochgeladene Dateien:\n"
             for i, file in enumerate(uploaded_files):
@@ -211,15 +131,111 @@ Zusätzliche LOKALE Funktionen (Server-seitig verfügbar):
             params = result.get('params', {})
             for key, value in params.items():
                 if isinstance(value, str) and value.startswith('USE_UPLOADED_FILE_'):
-                    file_index = int(value.split('_')[-1])
-                    if file_index < len(uploaded_files):
-                        params[key] = uploaded_files[file_index]['url']
+                    try:
+                        file_index = int(value.split('_')[-1])
+                        if file_index < len(uploaded_files):
+                            params[key] = uploaded_files[file_index]['url']
+                        else:
+                            logger.warning(f"LLM hallucinated upload index {file_index}, but only {len(uploaded_files)} files. Setting {key} to None.")
+                            params[key] = None
+                    except ValueError:
+                        params[key] = None
+        
+        # Cleanup: Remove any remaining placeholders if uploaded_files was empty/None
+        if not uploaded_files:
+             params = result.get('params', {})
+             for key, value in params.items():
+                if isinstance(value, str) and value.startswith('USE_UPLOADED_FILE_'):
+                     logger.warning(f"LLM used placeholder {value} but no files uploaded. Clearing {key}.")
+                     params[key] = None
         
         return result
         
     except Exception as e:
         logger.exception("LLM extraction failed")
         return fallback_extraction(user_message, uploaded_files)
+
+
+def transcribe_media(media_url, language='de'):
+    """
+    Transkribiert Media über die externe NCA Toolkit API.
+    
+    Args:
+        media_url: Erreichbare URL zur Datei (http://...)
+        language: Sprachcode
+        
+    Returns:
+        {
+            'text': 'Vollständiger Text',
+            'srt': 'SRT formatierter Text',
+            'language': 'de'
+        }
+    """
+    api_url = os.getenv('NCA_API_URL', 'http://localhost:8080')
+    api_key = os.getenv('NCA_API_KEY', '')
+    
+    endpoint = f"{api_url}/v1/media/transcribe"
+    logger.info(f"🎙️ NCA Transcription: {media_url} via {endpoint}")
+    
+    try:
+        # PING/Check before call? No, just call.
+        payload = {
+            'media_url': media_url,
+            'language': language,
+            'include_srt': True,
+            'include_text': True,
+            'response_type': 'direct'
+        }
+        
+        response = requests.post(
+            endpoint,
+            headers={'x-api-key': api_key, 'Content-Type': 'application/json'},
+            json=payload,
+            timeout=300 # 5min timeout for long files
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"API Error ({response.status_code}): {response.text}")
+            raise Exception(f"NCA API failed: {response.text}")
+            
+        result = response.json()
+        # AGGRESSIVE LOGGING (Visible even in non-debug mode)
+        logger.warning(f"🎙️ [VER5] NCA Raw Result Keys: {list(result.keys())}")
+        
+        # Determine where the actual data is (NCA often wraps in 'response')
+        data = result.get('response', result)
+        
+        # Handle cases where 'response' might be a JSON string
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+                logger.info("🔓 Decoded 'response' string into dict")
+            except:
+                pass
+
+        # Validate result structure
+        if isinstance(data, dict):
+            logger.warning(f"📝 NCA Data Keys: {list(data.keys())}")
+            srt_val = data.get('srt')
+            if srt_val is None:
+                 logger.warning("❌ 'srt' field is None in NCA response data")
+            elif 'srt' not in data:
+                 logger.warning("❌ 'srt' field MISSING in NCA response data")
+            else:
+                 logger.warning(f"✅ [VER5] 'srt' found, length: {len(str(srt_val))}")
+                 logger.warning(f"📝 [VER5] SRT CONTENT:\n{srt_val}")
+        else:
+            logger.warning(f"❌ NCA Data is not a dict: {type(data)}")
+
+        return {
+            'text': (data.get('text') or '') if isinstance(data, dict) else '',
+            'srt': (data.get('srt') or '') if isinstance(data, dict) else '',
+            'language': language
+        }
+
+    except Exception as e:
+        logger.error(f"External Transcription failed: {e}")
+        raise e
 
 
 import time
@@ -395,7 +411,58 @@ def fallback_extraction(user_message, uploaded_files=None):
         }
     
     # ============================================================================
-    # PRIORITY 7: MP3 Konvertierung
+    # PRIORITY 7: RSS Automatisierung
+    # ============================================================================
+    if any(kw in message_lower for kw in ['rss', 'feed', 'item', 'podcast', 'acidmonk']):
+        # Wenn nur nach Feed gefragt wird -> List
+        if any(kw in message_lower for kw in ['list', 'zeig', 'browse', 'durchsuche', 'themen']):
+            return {
+                'endpoint': '/api/rss/list',
+                'params': {'url': urls[0] if urls else None},
+                'confidence': 0.9,
+                'reasoning': 'Fallback: RSS Liste angefragt'
+            }
+        # Sonst -> Process
+        # Sonst -> Process
+        params = {
+            'image_url': None, 
+            'audio_url': None
+        }
+        
+        # Check for [PARAMS] block from Frontend
+        import re
+        if '[PARAMS]' in user_message:
+            try:
+                param_block = user_message.split('[PARAMS]')[1]
+                
+                # Extract Width
+                w_match = re.search(r'width:\s*(\d+)', param_block)
+                if w_match: params['width'] = int(w_match.group(1))
+                
+                # Extract Height
+                h_match = re.search(r'height:\s*(\d+)', param_block)
+                if h_match: params['height'] = int(h_match.group(1))
+                
+                # Extract Music URL
+                music_match = re.search(r'background_music_url:\s*([^\s\n]+)', param_block)
+                if music_match: params['background_music_url'] = music_match.group(1)
+                
+                # Extract Subtitles
+                sub_match = re.search(r'render_subtitles:\s*true', param_block, re.IGNORECASE)
+                if sub_match: params['render_subtitles'] = True
+                
+            except Exception as e:
+                logger.error(f"Failed to parse [PARAMS]: {e}")
+
+        return {
+            'endpoint': '/api/rss/process',
+            'params': params,
+            'confidence': 0.9, # Higher confidence because of explicit params
+            'reasoning': 'Fallback: RSS Verarbeitung mit expliziten Parametern'
+        }
+
+    # ============================================================================
+    # PRIORITY 8: MP3 Konvertierung
     # ============================================================================
     if any(kw in message_lower for kw in ['mp3', 'konvertier', 'convert', 'audio']):
         media_url = None

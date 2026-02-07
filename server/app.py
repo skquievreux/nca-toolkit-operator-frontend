@@ -28,9 +28,10 @@ import db_service
 import local_processor  # Local FFmpeg support
 
 # Import LLM/Workflow services AFTER load_dotenv
-from llm_service import extract_intent_and_params
+from llm_service import extract_intent_and_params, transcribe_media
 from workflow_engine import WorkflowEngine
-from api_helpers import safe_api_call, validate_params
+from api_helpers import safe_api_call, validate_params, validate_and_map_params
+import api_helpers
 import rss_service
 
 # Logging konfigurieren (mit Rotation und konfigurierbaren Levels)
@@ -55,8 +56,11 @@ db_service.init_db()
 # Workflow Engine initialisieren
 workflow_engine = WorkflowEngine(NCA_API_URL, NCA_API_KEY)
 
-# Build Number (increment on each significant change)
-BUILD_NUMBER = "2026.01.08.042"
+# Build and Run Information
+BUILD_NUMBER = "2026.02.07.001"
+RUN_ID = f"R-{int(time.time())}"
+logger.info(f"🚀 NCA Server Version: {VERSION} (Build: {BUILD_NUMBER})")
+logger.info(f"🆔 Run ID: {RUN_ID}")
 
 # Self-Diagnosis: Check Network IP
 HOST_IP = get_lan_ip()
@@ -175,6 +179,20 @@ def get_endpoints():
         'success': True,
         'endpoints': API_ENDPOINTS
     })
+
+@app.route('/api/voice/voices', methods=['GET'])
+def list_voices():
+    """Listet alle verfügbaren ElevenLabs Stimmen auf"""
+    import voice_service
+    try:
+        voices = voice_service.get_available_voices()
+        return jsonify({
+            'success': True,
+            'voices': voices
+        })
+    except Exception as e:
+        logger.error(f"Error listing voices: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/proxy', methods=['POST'])
@@ -319,10 +337,19 @@ def get_history():
 
 @app.route('/api/jobs', methods=['GET'])
 def list_jobs():
-    """Returns a list of all active/completed jobs"""
+    """Returns a list of jobs, optionally filtered by status"""
     try:
+        status_param = request.args.get('status')
+        status_filter = None
+        
+        if status_param:
+            if ',' in status_param:
+                status_filter = status_param.split(',')
+            else:
+                status_filter = status_param
+                
         # Get from DB
-        job_list = db_service.get_all_jobs(limit=100)
+        job_list = db_service.get_all_jobs(limit=100, status=status_filter)
         
         # Convert objects to dicts for JSON
         result = []
@@ -339,6 +366,16 @@ def list_jobs():
         return jsonify({'success': True, 'jobs': result})
     except Exception as e:
         logger.error(f"Error listing jobs: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/jobs/<job_id>', methods=['DELETE'])
+def delete_job(job_id):
+    """Deletes a job"""
+    try:
+        db_service.delete_job(job_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Error deleting job {job_id}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/jobs/<job_id>', methods=['GET'])
@@ -367,6 +404,25 @@ def get_job_status(job_id):
         })
     except Exception as e:
         logger.error(f"Error getting job {job_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/jobs', methods=['DELETE'])
+def delete_jobs_bulk():
+    """Deletes jobs in bulk, optionally filtered by status"""
+    try:
+        status_param = request.args.get('status')
+        status_filter = None
+        
+        if status_param:
+            if ',' in status_param:
+                status_filter = status_param.split(',')
+            else:
+                status_filter = status_param
+        
+        result = db_service.delete_jobs(status=status_filter)
+        return jsonify({'success': True, 'count': result.count if hasattr(result, 'count') else 0})
+    except Exception as e:
+        logger.error(f"Error deleting jobs: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -471,7 +527,7 @@ def execute_scenario():
     })
 
 
-def process_job_async(job_id, user_message, conversation_id, uploaded_files):
+def process_job_async(job_id, user_message, conversation_id, uploaded_files, language=None):
     """Hintergrund-Thread für normale Requests"""
     try:
         # 1. Update Progress
@@ -482,10 +538,12 @@ def process_job_async(job_id, user_message, conversation_id, uploaded_files):
         })
         
         logger.debug("🤖 Calling LLM for intent extraction...")
-        llm_result = extract_intent_and_params(user_message, uploaded_files)
+        llm_result = extract_intent_and_params(user_message, uploaded_files, language=language)
         
         endpoint = llm_result.get('endpoint')
-        params = llm_result.get('params', {})
+        job_params = llm_result.get('params', {})
+        
+        logger.warning(f"🤖 Processing Request: zoom_pan={job_params.get('zoom_pan', False)}, subtitles={job_params.get('render_subtitles', False)}")
         
         # VALIDATION: Check if endpoint was detected
         if not endpoint:
@@ -502,7 +560,7 @@ def process_job_async(job_id, user_message, conversation_id, uploaded_files):
         db_service.update_job(job_id, {'endpoint': endpoint})
         
         logger.debug(f"🧐 DEBUG: uploaded_files in thread: {uploaded_files}")
-        logger.debug(f"🧐 DEBUG: Initial params: {params}")
+        logger.debug(f"🧐 DEBUG: Initial params: {job_params}")
 
         def resolve_params(parameters, uploads):
             if not parameters: return {}
@@ -534,16 +592,27 @@ def process_job_async(job_id, user_message, conversation_id, uploaded_files):
         # Resolve params with uploads
         if uploaded_files:
             logger.debug("🔧 Resolving parameters with uploads...")
-            params = resolve_params(params, uploaded_files)
-            logger.debug(f"✅ Resolved params: {params}")
+            job_params = resolve_params(job_params, uploaded_files)
+            logger.debug(f"✅ Resolved params: {job_params}")
             
+        # 1.5 Robust Validation & Mapping
+        try:
+            job_params = validate_and_map_params(endpoint, job_params)
             # Update params in DB (serialize to JSON string)
-            db_service.update_job(job_id, {'params': json.dumps(params)})
+            db_service.update_job(job_id, {'params': json.dumps(job_params)})
+        except ValueError as e:
+            logger.error(f"❌ Validation failed for {endpoint}: {e}")
+            db_service.update_job(job_id, {
+                'status': 'failed',
+                'progress': 100,
+                'statusMessage': str(e)
+            })
+            return
 
         # 2. Handle YouTube downloads automatically
-        if params:
+        if job_params:
             from youtube_service import is_youtube_url, download_youtube_video
-            for key, value in params.items():
+            for key, value in job_params.items():
                 if isinstance(value, str) and is_youtube_url(value):
                     db_service.update_job(job_id, {
                         'progress': 50,
@@ -551,7 +620,7 @@ def process_job_async(job_id, user_message, conversation_id, uploaded_files):
                     })
                     
                     download_result = download_youtube_video(value)
-                    params[key] = download_result['url']
+                    job_params[key] = download_result['url']
                     
                     db_service.update_job(job_id, {
                         'progress': 60,
@@ -560,29 +629,29 @@ def process_job_async(job_id, user_message, conversation_id, uploaded_files):
 
         # 3. Special Case: Audio Concatenation (Local Override)
         nca_response = None
-        if endpoint == '/combine-videos' and params.get('media_urls'):
-            first_url = params['media_urls'][0] if params['media_urls'] else ''
+        if endpoint == '/combine-videos' and job_params.get('media_urls'):
+            first_url = job_params['media_urls'][0] if job_params['media_urls'] else ''
             if first_url.endswith('.mp3') or first_url.endswith('.wav') or first_url.endswith('.aac'):
                 logger.info("🎵 Handling audio concatenation locally")
                 from local_audio_service import concatenate_audio_files
                 import uuid
                 output_filename = f"concatenated_{uuid.uuid4().hex[:8]}.mp3"
-                result_url = concatenate_audio_files(params['media_urls'], output_filename)
+                result_url = concatenate_audio_files(job_params['media_urls'], output_filename)
                 nca_response = {
                     'success': True,
                     'output_url': result_url,
                     'message': 'Audio concatenation completed locally',
-                    'files_concatenated': len(params['media_urls'])
+                    'files_concatenated': len(job_params['media_urls'])
                 }
             else:
-                nca_response = call_nca_api(endpoint, params)
+                nca_response = call_nca_api(endpoint, job_params)
         
         # 4. Special Case: Audio Mixing (Local Override)
-        elif (endpoint == '/v1/video/add/audio' or endpoint == '/audio-mixing') and params.get('video_url') and params.get('audio_url'):
+        elif (endpoint == '/v1/video/add/audio' or endpoint == '/audio-mixing') and job_params.get('video_url') and job_params.get('audio_url'):
             if local_processor.check_local_ffmpeg():
                  logger.info("🎬 Handling video/audio mixing locally")
                  from local_processor import local_audio_mixing
-                 mixing_result = local_audio_mixing(params['video_url'], params['audio_url'])
+                 mixing_result = local_audio_mixing(job_params['video_url'], job_params['audio_url'])
                  nca_response = {
                     'success': True,
                     'output_url': mixing_result['url'],
@@ -590,13 +659,41 @@ def process_job_async(job_id, user_message, conversation_id, uploaded_files):
                     'result': mixing_result
                  }
 
+        # 5. Special Case: RSS Processing (Local Internal)
+        elif endpoint == '/api/rss/process':
+             logger.info("🗞️ Processing RSS Job locally (Internal)")
+             try:
+                 result = rss_service.generate_rss_video(
+                     image_url=job_params.get('image_url'),
+                     audio_url=job_params.get('audio_url'),
+                     title=job_params.get('title'),
+                     background_music_url=job_params.get('background_music_url'),
+                     width=int(job_params.get('width', 1280)),
+                     height=int(job_params.get('height', 720)),
+                     music_volume=float(job_params.get('music_volume', 0.2)),
+                     render_subtitles=job_params.get('render_subtitles', False),
+                     zoom_pan=job_params.get('zoom_pan', False),
+                     font_family=job_params.get('font_family', 'Arial'),
+                     voice_id=job_params.get('voice_id', 'Adam'),
+                     language=job_params.get('language', 'de')
+                 )
+                 nca_response = {
+                     'success': True,
+                     'message': 'RSS Video successfully generated (Local)',
+                     'result': result
+                 }
+             except Exception as e:
+                 logger.error(f"RSS Job failed: {e}")
+                 # Job fails in outer block
+                 raise e
+
         # 5. Regular Case: Call API
         if not nca_response:
             db_service.update_job(job_id, {
                 'progress': 70,
                 'statusMessage': f'Rufe {endpoint} auf...'
             })
-            nca_response = call_nca_api(endpoint, params)
+            nca_response = call_nca_api(endpoint, job_params)
         
         # 6. Complete Job
         db_service.update_job(job_id, {
@@ -640,9 +737,11 @@ def process_request():
             data = request.get_json()
             user_message = data.get('message', '')
             conversation_id = data.get('conversation_id')
+            language = data.get('language')
         else:
             user_message = request.form.get('message', '')
             conversation_id = request.form.get('conversation_id')
+            language = request.form.get('language')
         
         logger.debug(f"📥 Received request: message='{user_message}', conversation_id={conversation_id}")
         logger.debug(f"📥 Request is_json: {request.is_json}")
@@ -686,7 +785,7 @@ def process_request():
         job = db_service.create_job(
             title=user_message[:50] or 'Request',
             endpoint='detecting...',
-            params={'uploaded_files': uploaded_files},
+            params={'uploaded_files': uploaded_files, 'language': language},
             status='processing'
         )
         
@@ -697,7 +796,7 @@ def process_request():
         })
             
         # Start background thread
-        thread = threading.Thread(target=process_job_async, args=(job.id, user_message, conversation_id, uploaded_files))
+        thread = threading.Thread(target=process_job_async, args=(job.id, user_message, conversation_id, uploaded_files, language))
         thread.daemon = True
         thread.start()
         
@@ -732,27 +831,9 @@ def call_nca_api(endpoint, params):
             'timestamp': datetime.datetime.now().isoformat()
         }
 
-    # VALIDATION
-    required_params = {
-        '/audio-mixing': ['video_url', 'audio_url'],
-        '/combine-videos': ['video_urls'],
-        '/media-to-mp3': ['media_url'],
-        '/transcribe': ['media_url'],
-        '/gdrive-upload': ['file_url']
-    }
-
-    if endpoint in required_params:
-        missing = [p for p in required_params[endpoint] if p not in params or not params[p]]
-        if missing:
-            # Versuch Parameter zu korrigieren
-            if endpoint == '/audio-mixing' and 'media_url' in params:
-                # Vielleicht wurde nur eine URL übergeben?
-                pass 
-            
-            logger.error(f"❌ Missing parameters for {endpoint}: {missing}")
-            raise ValueError(f"Fehlende Parameter für {endpoint}: {', '.join(missing)}")
-            
-    # Parameter-Bereinigung
+    # ROBUST VALIDATION & ALIASING
+    params = validate_and_map_params(endpoint, params)
+    
     # Entferne leere Parameter
     params = {k: v for k, v in params.items() if v is not None}
 
@@ -926,41 +1007,46 @@ def api_upload_result():
             logger.error(f"❌ Upload failed: {e}")
             return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/shutdown', methods=['POST'])
+def shutdown_server():
+    """Beendet den Flask-Server kontrolliert"""
+    # Nur von localhost erlauben
+    if request.remote_addr not in ['127.0.0.1', 'localhost']:
+         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+         
+    logger.warning(f"🛑 Shutdown requested via API (Run-ID: {RUN_ID})")
+    
+    def kill():
+        time.sleep(1)
+        logger.info("👋 Server closed.")
+        os._exit(0)
+        
+    threading.Thread(target=kill).start()
+    return jsonify({'success': True, 'message': 'Server wird beendet...'})
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health Check Endpunkt"""
+    uptime = time.time() - START_TIME
     try:
-        # Teste Verbindung zum NCA Toolkit
-        # Wir nutzen /authenticate da der Root-Pfad 404 liefert
-        headers = {'x-api-key': NCA_API_KEY}
+        # Minimalistischer Health Check (Server selbst muss antworten)
+        nca_status = 'unknown'
         try:
-            # Versuche Authenticate Endpoint
-            response = requests.post(
-                f"{NCA_API_URL}/authenticate", # Container path seems to be /authenticate based on blueprint
-                headers=headers,
-                timeout=5
-            )
-            # 200 = Authorized, 401 = Unauthorized (aber erreichbar!), 404 = Falscher Pfad
-            if response.status_code in [200, 401]:
-                nca_status = 'healthy'
-            else:
-                # Fallback: Vielleicht ist es unter /v1/toolkit/authenticate?
-                response = requests.post(
-                    f"{NCA_API_URL}/v1/toolkit/authenticate",
-                    headers=headers,
-                    timeout=5
-                )
-                if response.status_code in [200, 401]:
-                    nca_status = 'healthy'
-                else:
-                    nca_status = f'unhealthy ({response.status_code})'
-        except requests.exceptions.RequestException:
-             nca_status = 'unreachable'
+            # NCA Toolkit Check ist optional
+            resp = requests.post(f"{NCA_API_URL}/authenticate", headers={'x-api-key': NCA_API_KEY}, timeout=2)
+            nca_status = 'healthy' if resp.status_code in [200, 401, 405] else f'unhealthy ({resp.status_code})'
+        except:
+            nca_status = 'unreachable'
     except:
         nca_status = 'unreachable'
     
     return jsonify({
         'status': 'healthy',
+        'version': VERSION,
+        'build': BUILD_NUMBER,
+        'run_id': RUN_ID,
+        'uptime_seconds': int(uptime),
         'timestamp': datetime.datetime.utcnow().isoformat(),
         'nca_toolkit': {
             'url': NCA_API_URL,
@@ -1033,86 +1119,164 @@ def read_doc():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/transcribe', methods=['POST'])
+def transcribe():
+    """AI-gestützte Transkription von Audio/Video"""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'Original JSON payload required'}), 400
+        
+    media_url = data.get('media_url')
+    if not media_url:
+        return jsonify({'error': 'media_url required'}), 400
+        
+    language = data.get('language', 'de')
+    
+    # Lokalen Pfad ermitteln
+    local_path = local_processor.url_to_path(media_url)
+    if not local_path or not os.path.exists(local_path):
+        return jsonify({'error': f'File not found locally: {media_url}'}), 404
+        
+    try:
+        results = transcribe_media(local_path, language=language)
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/rss/list', methods=['GET'])
 def list_rss_items():
-    """Gibt die neuesten Items aus dem RSS-Feed zurück"""
+    """Gibt Items aus einem beliebigen RSS-Feed zurück"""
+    url = request.args.get('url')
     limit = request.args.get('limit', default=10, type=int)
-    items = rss_service.get_rss_items(limit=limit)
+    items = rss_service.get_rss_items(url=url, limit=limit)
     return jsonify({'success': True, 'items': items})
 
 
 @app.route('/api/rss/latest', methods=['GET'])
 def get_latest_rss():
-    """Gibt das neueste Item aus dem RSS-Feed zurück"""
-    item = rss_service.get_latest_rss_item()
+    """Gibt das neueste Item aus einem RSS-Feed zurück"""
+    url = request.args.get('url')
+    item = rss_service.get_latest_rss_item(url=url)
     if not item:
         return jsonify({'success': False, 'error': 'Konnte RSS-Feed nicht lesen'}), 500
     return jsonify({'success': True, 'item': item})
 
 
+
+def process_rss_async(job_id, params, conversation_id, item):
+    """Hintergrund-Thread für RSS-Videoerstellung"""
+    try:
+        # Update progress
+        db_service.update_job(job_id, {
+            'progress': 10,
+            'statusMessage': 'Initialisiere RSS-Verarbeitung...'
+        })
+        
+        # Call generation service
+        final_result = rss_service.generate_rss_video(
+            image_url=params.get('image_url'),
+            audio_url=params.get('audio_url'),
+            title=params.get('title', 'RSS Video'),
+            background_music_url=params.get('background_music_url'),
+            width=int(params.get('width', 1280)),
+            height=int(params.get('height', 720)),
+            music_volume=float(params.get('music_volume', 0.2)),
+            render_subtitles=params.get('render_subtitles', False),
+            zoom_pan=params.get('zoom_pan', False),
+            font_family=params.get('font_family', 'Arial'),
+            voice_id=params.get('voice_id', 'Adam'),
+            language=params.get('language', 'de')
+        )
+        
+        # Update job status
+        db_service.update_job(job_id, {
+            'status': 'completed',
+            'progress': 100,
+            'statusMessage': 'Video erfolgreich generiert!',
+            'result': final_result
+        })
+        
+        # Save assistant message
+        db_service.save_message(conversation_id, 'assistant', f"RSS Video fertig: {params.get('title')}", 
+                                data={'result': final_result, 'item': item})
+                                
+        logger.info(f"✅ RSS Background Job {job_id} completed successfully")
+        
+    except Exception as e:
+        logger.exception(f"💥 RSS Job {job_id} failed")
+        db_service.update_job(job_id, {
+            'status': 'failed',
+            'statusMessage': str(e)
+        })
+
 @app.route('/api/rss/process', methods=['POST'])
 def process_rss_item():
     """
-    Orchestriert die Erstellung eines Videos aus einem RSS-Item oder manuellen URLs
+    Orchestriert die Erstellung eines Videos aus einem RSS-Item (Async Job)
     """
     data = request.get_json()
     image_url = data.get('image_url')
     audio_url = data.get('audio_url')
     title = data.get('title', 'RSS Video')
-
+    conversation_id = data.get('conversation_id')
+    
+    # Validierung / Latest-Fallback
+    item = None
     if not image_url or not audio_url:
-        # Fallback auf neuestes Item wenn nichts übergeben wurde
-        item = rss_service.get_latest_rss_item()
-        if not item or not item['image_url'] or not item['audio_url']:
-            return jsonify({'success': False, 'error': 'Bild/Audio URL fehlt'}), 400
-        image_url = item['image_url']
-        audio_url = item['audio_url']
-        title = item['title']
+        latest = rss_service.get_latest_rss_item()
+        if not latest:
+            return jsonify({'success': False, 'error': 'Keine URLs und kein Feed-Item gefunden'}), 400
+        image_url = latest['image_url']
+        audio_url = latest['audio_url']
+        title = latest.get('title', 'RSS Video')
+        item = latest
+    else:
+        item = {'title': title, 'image_url': image_url, 'audio_url': audio_url}
 
-    logger.info(f"🚀 Starte RSS-to-Video Processing für: {title}")
+    # Prepare job params
+    params = {
+        'image_url': image_url,
+        'audio_url': audio_url,
+        'title': title,
+        'background_music_url': data.get('background_music_url'),
+        'width': data.get('width', 1280),
+        'height': data.get('height', 720),
+        'music_volume': data.get('music_volume', 0.2),
+        'render_subtitles': data.get('render_subtitles', False),
+        'zoom_pan': data.get('zoom_pan', False),
+        'font_family': data.get('font_family', 'Arial'),
+        'voice_id': data.get('voice_id', 'Adam'),
+        'language': data.get('language', 'de')
+    }
 
-    try:
-        # Schritt 1: Image -> Video (30s)
-        logger.info(f"Schritt 1: Konvertiere Bild zu Video (30s)... URL: {item['image_url']}")
-        step1_params = {
-            'image_url': item['image_url'],
-            'duration': 30,
-            'zoom': True
-        }
+    # Create conversation if missing
+    if not conversation_id:
+        conv = db_service.save_conversation(title=f"RSS: {title}")
+        conversation_id = conv.id
         
-        headers = {'x-api-key': NCA_API_KEY, 'Content-Type': 'application/json'}
-        resp1 = requests.post(f"{NCA_API_URL}/v1/image/convert/video", json=step1_params, headers=headers, timeout=600)
-        
-        if not resp1.ok:
-            return jsonify({'success': False, 'error': f'Schritt 1 fehlgeschlagen: {resp1.text}'}), 500
-        
-        video_url = resp1.json().get('output_url')
-        if not video_url:
-             return jsonify({'success': False, 'error': 'Schritt 1 lieferte keine Video-URL'}), 500
-
-        # Schritt 2: Audio hinzufügen
-        logger.info(f"Schritt 2: Füge Audio hinzu... URL: {item['audio_url']}")
-        step2_params = {
-            'video_url': video_url,
-            'audio_url': item['audio_url']
-        }
-        
-        resp2 = requests.post(f"{NCA_API_URL}/v1/video/add/audio", json=step2_params, headers=headers, timeout=600)
-        if not resp2.ok:
-            return jsonify({'success': False, 'error': f'Schritt 2 fehlgeschlagen: {resp2.text}'}), 500
-
-        final_result = resp2.json()
-        
-        return jsonify({
-            'success': True,
-            'message': 'RSS Video erfolgreich generiert',
-            'item': item,
-            'result': final_result
-        })
-
-    except Exception as e:
-        logger.exception("Fehler bei RSS Orchestrierung")
-        return jsonify({'success': False, 'error': str(e)}), 500
+    # Create Job
+    job = db_service.create_job(
+        title=f"RSS Video: {title}",
+        endpoint='/api/rss/process',
+        params=params,
+        status='processing'
+    )
+    
+    # Save user message
+    db_service.save_message(conversation_id, 'user', f"Generiere RSS Video für: {title}", data={'params': params})
+    
+    # Start thread
+    thread = threading.Thread(target=process_rss_async, args=(job.id, params, conversation_id, item))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'success': True,
+        'job_id': job.id,
+        'conversation_id': conversation_id,
+        'message': 'RSS Video Job gestartet'
+    })
 
 
 if __name__ == '__main__':
@@ -1129,5 +1293,6 @@ if __name__ == '__main__':
     app.run(
         host='0.0.0.0',
         port=5000,
-        debug=True
+        debug=True,
+        use_reloader=False
     )

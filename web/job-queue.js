@@ -25,8 +25,10 @@ function initJobQueue() {
         panel?.classList.add('collapsed');
     }
 
-    // Start periodic refresh of all active jobs
-    setInterval(() => refreshAllJobs(), 2000);
+    // Start periodic refresh of active jobs only
+    setInterval(() => refreshActiveJobs(), 2000);
+    // Refresh all jobs once on init
+    refreshAllJobs();
 
     console.log('✅ Job Queue initialized');
 }
@@ -42,6 +44,14 @@ function addJobToQueue(jobId, jobData) {
 
     // Start polling this job
     startJobPolling(jobId);
+
+    // Auto-expand queue if collapsed
+    if (state.jobQueue.collapsed) {
+        state.jobQueue.collapsed = false;
+        const panel = document.getElementById('jobQueuePanel');
+        panel?.classList.remove('collapsed');
+        localStorage.setItem('jobQueueCollapsed', 'false');
+    }
 
     // Update UI
     renderJobQueue();
@@ -89,12 +99,6 @@ async function pollJobStatus(jobId) {
         // Stop polling if job complete or failed
         if (job.status === 'completed' || job.status === 'failed') {
             stopJobPolling(jobId);
-
-            // Auto-remove completed jobs after 5 minutes
-            setTimeout(() => {
-                delete state.jobQueue.jobs[jobId];
-                renderJobQueue();
-            }, 5 * 60 * 1000);
         }
 
         // Update UI for this specific job
@@ -105,39 +109,55 @@ async function pollJobStatus(jobId) {
     }
 }
 
+async function refreshActiveJobs() {
+    // Get list of ACTIVE jobs only
+    try {
+        const response = await fetch(`${state.backendUrl}/api/jobs?status=pending,processing`);
+        if (response.ok) {
+            const data = await response.json();
+            const jobs = data.jobs || [];
+
+            // Update local state for these jobs
+            jobs.forEach(job => {
+                state.jobQueue.jobs[job.id] = job;
+
+                // Ensure polling is active
+                if (!state.jobQueue.polling[job.id]) {
+                    startJobPolling(job.id);
+                }
+            });
+
+            // Check for jobs that are no longer in the active list but we think are active
+            // This handles cases where a job completed between polls
+            Object.values(state.jobQueue.jobs).forEach(job => {
+                if ((job.status === 'pending' || job.status === 'processing') &&
+                    !jobs.find(j => j.id === job.id)) {
+                    // Job is no longer in active list, likely completed/failed
+                    // Poll it one last time to update status
+                    pollJobStatus(job.id);
+                }
+            });
+
+            renderJobQueue();
+        }
+    } catch (error) {
+        console.error("❌ Error running refreshActiveJobs:", error);
+    }
+}
+
 async function refreshAllJobs() {
-    // Get list of active jobs from backend
+    // Initial load of all jobs (including history)
     try {
         const response = await fetch(`${state.backendUrl}/api/jobs`);
         if (response.ok) {
             const data = await response.json();
             const jobs = data.jobs || [];
 
-            console.log(`📋 Loaded ${jobs.length} jobs from backend`);
-
-            // CRITICAL FIX: Show ALL jobs but only poll ACTIVE ones
-            // This prevents ERR_INSUFFICIENT_RESOURCES from polling 100+ completed jobs
             jobs.forEach(job => {
-                // Add job to local state for display
                 state.jobQueue.jobs[job.id] = job;
-
-                // Only start polling for ACTIVE jobs (not completed/failed)
-                if (job.status === 'processing' || job.status === 'pending') {
-                    if (!state.jobQueue.polling[job.id]) {
-                        startJobPolling(job.id);
-                    }
-                } else {
-                    // Stop polling for completed/failed jobs (if it was running)
-                    stopJobPolling(job.id);
-                }
             });
 
-            console.log(`📋 Total jobs in state: ${Object.keys(state.jobQueue.jobs).length}`);
-
-            // Update UI to show all jobs
             renderJobQueue();
-        } else {
-            console.error(`❌ API returned ${response.status}: ${response.statusText}`);
         }
     } catch (error) {
         console.error("❌ Error running refreshAllJobs:", error);
@@ -147,6 +167,34 @@ async function refreshAllJobs() {
 function renderJobQueue() {
     const jobList = document.getElementById('jobList');
     const badge = document.getElementById('jobCountBadge');
+
+    // Create or get header controls container
+    let headerControls = document.getElementById('jobQueueHeaderControls');
+    if (!headerControls) {
+        const header = document.querySelector('.job-queue-header');
+        if (header) {
+            headerControls = document.createElement('div');
+            headerControls.id = 'jobQueueHeaderControls';
+            headerControls.className = 'job-queue-controls';
+
+            // Add bulk delete buttons
+            headerControls.innerHTML = `
+                <button id="deleteCompletedBtn" class="icon-btn small" title="Alle fertigen löschen">✅🗑️</button>
+                <button id="deleteFailedBtn" class="icon-btn small" title="Alle fehlerhaften löschen">❌🗑️</button>
+            `;
+            // Insert BEFORE the toggle button so only toggle button is at the far right
+            const toggleBtn = header.querySelector('#toggleQueueBtn');
+            if (toggleBtn) {
+                header.insertBefore(headerControls, toggleBtn);
+            } else {
+                header.appendChild(headerControls);
+            }
+
+            // Attach listeners
+            document.getElementById('deleteCompletedBtn')?.addEventListener('click', () => deleteJobsBulk('completed'));
+            document.getElementById('deleteFailedBtn')?.addEventListener('click', () => deleteJobsBulk('failed'));
+        }
+    }
 
     if (!jobList) return;
 
@@ -166,10 +214,7 @@ function renderJobQueue() {
     if (jobs.length === 0) {
         jobList.innerHTML = `
             <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
-                <p>Keine aktiven Jobs</p>
-                <p style="font-size: 0.85rem; margin-top: 0.5rem;">
-                    Jobs erscheinen hier, wenn Sie eine Aufgabe starten
-                </p>
+                <p>Keine Jobs</p>
             </div>
         `;
         return;
@@ -180,10 +225,14 @@ function renderJobQueue() {
     // Attach event listeners
     jobs.forEach(job => {
         const viewBtn = document.getElementById(`view-job-${job.id}`);
+        // Cancel button for active jobs
         const cancelBtn = document.getElementById(`cancel-job-${job.id}`);
+        // Delete button for completed/failed jobs
+        const deleteBtn = document.getElementById(`delete-job-${job.id}`);
 
         viewBtn?.addEventListener('click', () => viewJobResult(job.id));
         cancelBtn?.addEventListener('click', () => cancelJob(job.id));
+        deleteBtn?.addEventListener('click', () => deleteJob(job.id));
     });
 }
 
@@ -232,6 +281,9 @@ function createJobCardHTML(job) {
                     <button class="job-action-btn primary" id="view-job-${job.id}">
                         Ergebnis anzeigen
                     </button>
+                    <button class="job-action-btn" id="delete-job-${job.id}" title="Löschen">
+                        🗑️
+                    </button>
                 ` : ''}
                 ${status === 'processing' || status === 'pending' ? `
                     <button class="job-action-btn" id="cancel-job-${job.id}">
@@ -242,6 +294,9 @@ function createJobCardHTML(job) {
                     <button class="job-action-btn" id="view-job-${job.id}">
                         Fehler anzeigen
                     </button>
+                    <button class="job-action-btn" id="delete-job-${job.id}" title="Löschen">
+                        🗑️
+                    </button>
                 ` : ''}
             </div>
             
@@ -251,52 +306,25 @@ function createJobCardHTML(job) {
 }
 
 function updateJobCard(jobId, job) {
-    const card = document.querySelector(`.job-card[data-job-id="${jobId}"]`);
-    if (!card) {
-        // Job card doesn't exist yet, re-render full list
+    // Re-render full list if status changed to enable different buttons
+    // Or simpler: just replace outer HTML of the specific card
+    const oldCard = document.querySelector(`.job-card[data-job-id="${jobId}"]`);
+    if (oldCard) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = createJobCardHTML(job);
+        const newCard = tempDiv.firstElementChild;
+        oldCard.replaceWith(newCard);
+
+        // Re-attach listeners for this card
+        const viewBtn = document.getElementById(`view-job-${job.id}`);
+        const cancelBtn = document.getElementById(`cancel-job-${job.id}`);
+        const deleteBtn = document.getElementById(`delete-job-${job.id}`);
+
+        viewBtn?.addEventListener('click', () => viewJobResult(job.id));
+        cancelBtn?.addEventListener('click', () => cancelJob(job.id));
+        deleteBtn?.addEventListener('click', () => deleteJob(job.id));
+    } else {
         renderJobQueue();
-        return;
-    }
-
-    // Update status class
-    card.className = `job-card status-${job.status}`;
-
-    // Update status badge
-    const badge = card.querySelector('.job-status-badge');
-    if (badge) {
-        const statusText = {
-            'pending': 'Wartend',
-            'processing': 'Läuft',
-            'completed': 'Fertig',
-            'failed': 'Fehler'
-        }[job.status] || job.status;
-
-        badge.className = `job-status-badge ${job.status}`;
-        badge.textContent = statusText;
-    }
-
-    // Update progress bar
-    const progressBar = card.querySelector('.progress-bar');
-    const progressText = card.querySelector('.progress-text');
-
-    if (progressBar) {
-        progressBar.style.width = `${job.progress || 0}%`;
-    }
-
-    if (progressText) {
-        const spinner = job.status === 'processing' ? '<span class="job-spinner"></span>' : '';
-        progressText.innerHTML = `${spinner}${job.progress || 0}% - ${escapeHtml(job.message || '')}`;
-    }
-
-    // Update badge count
-    const activeCount = Object.values(state.jobQueue.jobs).filter(
-        j => j.status === 'processing' || j.status === 'pending'
-    ).length;
-
-    const countBadge = document.getElementById('jobCountBadge');
-    if (countBadge) {
-        countBadge.textContent = activeCount;
-        countBadge.style.display = activeCount > 0 ? 'inline-flex' : 'none';
     }
 }
 
@@ -342,14 +370,32 @@ function viewJobResult(jobId) {
     }
 }
 
-function cancelJob(jobId) {
-    // For now, just remove from local state
-    // TODO: Add backend endpoint to actually cancel job
+async function cancelJob(jobId) {
+    // Treat cancel as delete for now, or just stop polling
     stopJobPolling(jobId);
-    delete state.jobQueue.jobs[jobId];
-    renderJobQueue();
+    // Optionally call backend delete
+    await deleteJob(jobId);
+}
 
-    console.log(`🛑 Job cancelled: ${jobId}`);
+async function deleteJob(jobId) {
+    if (!confirm('Job wirklich löschen?')) return;
+
+    try {
+        const response = await fetch(`${state.backendUrl}/api/jobs/${jobId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            stopJobPolling(jobId);
+            delete state.jobQueue.jobs[jobId];
+            renderJobQueue();
+            console.log(`🗑️ Job deleted: ${jobId}`);
+        } else {
+            console.error('Failed to delete job');
+        }
+    } catch (e) {
+        console.error('Error deleting job:', e);
+    }
 }
 
 function formatTimeAgo(timestamp) {
@@ -359,6 +405,39 @@ function formatTimeAgo(timestamp) {
     if (seconds < 3600) return `vor ${Math.floor(seconds / 60)} Min`;
     if (seconds < 86400) return `vor ${Math.floor(seconds / 3600)} Std`;
     return `vor ${Math.floor(seconds / 86400)} Tagen`;
+}
+
+async function deleteJobsBulk(status) {
+    const confirmMsg = status === 'completed'
+        ? 'Alle fertigen Jobs löschen?'
+        : 'Alle fehlerhaften Jobs löschen?';
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+        const response = await fetch(`${state.backendUrl}/api/jobs?status=${status}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log(`🗑️ Deleted ${data.count} ${status} jobs`);
+
+            // Clear from local state
+            Object.keys(state.jobQueue.jobs).forEach(jobId => {
+                if (state.jobQueue.jobs[jobId].status === status) {
+                    stopJobPolling(jobId);
+                    delete state.jobQueue.jobs[jobId];
+                }
+            });
+
+            renderJobQueue();
+        } else {
+            console.error('Failed to delete jobs');
+        }
+    } catch (e) {
+        console.error('Error deleting jobs:', e);
+    }
 }
 
 // Helper function for HTML escaping

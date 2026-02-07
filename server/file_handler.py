@@ -58,6 +58,66 @@ def get_file_size_mb(size_bytes):
     return round(size_bytes / (1024 * 1024), 2)
 
 
+def download_remote_file(url):
+    """
+    Downloads a file from a remote URL to the upload folder.
+    Handles query parameters in URL and validates content type.
+    """
+    import requests
+    from urllib.parse import urlparse, unquote
+    
+    if not url:
+        raise ValueError("Keine URL übergeben")
+        
+    try:
+        # 1. Parse filename from URL
+        parsed_url = urlparse(url)
+        path = unquote(parsed_url.path)
+        filename = os.path.basename(path)
+        
+        # Fallback if no filename in path
+        if not filename or '.' not in filename:
+            filename = f"download_{uuid.uuid4().hex[:8]}.bin"
+            
+        # 2. Download (stream)
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+        
+        # 3. Validate Content-Type if possible, or trust extension
+        # (Extension check happens via allowed_file later or we manually check)
+        
+        # 4. Generate unique stored filename
+        ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'bin'
+        stored_filename = f"{uuid.uuid4()}.{ext}"
+        filepath = os.path.join(UPLOAD_FOLDER, stored_filename)
+        
+        init_upload_folder()
+        
+        with open(filepath, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+                
+        logger.info(f"Downloaded remote file: {url} -> {stored_filename}")
+        
+        # 5. Return info dict similar to handle_upload
+        file_size = os.path.getsize(filepath)
+        host_ip = get_lan_ip()
+        file_url = f"http://{host_ip}:5000/uploads/{stored_filename}"
+        
+        return {
+            'filename': filename,
+            'stored_filename': stored_filename,
+            'url': file_url,
+            'type': ext,
+            'size': file_size,
+            'local_path': filepath
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to download remote file {url}: {e}")
+        raise e
+
+
 def calculate_file_hash(file_stream):
     """Calculates SHA256 hash of a file stream"""
     import hashlib

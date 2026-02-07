@@ -18,6 +18,26 @@ _discovered_endpoints = None
 # Known endpoints from container inspection (verified 2026-01-08)
 # These are the ONLY endpoints that actually exist in the container
 KNOWN_ENDPOINTS = {
+    '/v1/code/execute/python': {
+        'method': 'POST',
+        'description': 'Führt Python-Code aus',
+        'params': ['code', 'requirements (optional)']
+    },
+    '/v1/media/metadata': {
+        'method': 'POST',
+        'description': 'Extrahiert Metadaten aus Media-Datei',
+        'params': ['media_url']
+    },
+    '/v1/media/convert': {
+        'method': 'POST',
+        'description': 'Konvertiert Medienformate (Generisch)',
+        'params': ['media_url', 'format']
+    },
+    '/v1/toolkit/authenticate': {
+        'method': 'POST',
+        'description': 'Authentifizierung testen',
+        'params': []
+    },
     '/audio-mixing': {
         'method': 'POST',
         'description': 'Mischt Audio mit Video (Alternative: /v1/video/add/audio)',
@@ -87,6 +107,16 @@ KNOWN_ENDPOINTS = {
         'method': 'POST',
         'description': 'Lädt ein Video von YouTube herunter',
         'params': ['url']
+    },
+    '/api/rss/process': {
+        'method': 'POST',
+        'description': 'Generiert Video aus RSS (Bild/Audio) - Use this for Acid Monk / Racket Voice',
+        'params': ['image_url', 'audio_url', 'title (optional)']
+    },
+    '/api/rss/list': {
+        'method': 'GET',
+        'description': 'Listet Items eines Feeds auf',
+        'params': ['url (optional)', 'limit (optional, default: 10)']
     },
     '/v1/toolkit/test': {
         'method': 'GET',

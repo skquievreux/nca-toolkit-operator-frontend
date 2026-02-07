@@ -10,13 +10,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <<<<<<< HEAD <link rel="stylesheet" href="styles.css">
-        <link rel="stylesheet" href="progress-tracker.css">
-        <link rel="stylesheet" href="suggestions-panel.css">
-        =======
-        <link rel="stylesheet" href="styles.css?v=16">
-        <link rel="stylesheet" href="progress-tracker.css?v=16">
-        >>>>>>> 749d5f9 (chore(sprint): finalize voice features and frontend fixes)
+    <link rel="stylesheet" href="styles.css?v=17">
+    <link rel="stylesheet" href="progress-tracker.css?v=17">
+    <link rel="stylesheet" href="suggestions-panel.css?v=17">
+    <link rel="stylesheet" href="rss-settings.css?v=1">
 </head>
 
 <body>
@@ -134,14 +131,19 @@
                                 </button>
 
                                 <h3 style="margin-top: 1.5rem;">📡 RSS Automatisierung:</h3>
+                                <div class="form-group" style="margin-bottom: 10px;">
+                                    <input type="text" id="rssUrlInput" placeholder="RSS Feed URL eingeben..."
+                                        style="width: 100%;"
+                                        value="https://acidmonk.unlock-your-song.de/api/rss/racket-voice">
+                                </div>
                                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                                     <button class="example-prompt" id="generateRssVideoBtn"
                                         data-prompt="Generiere Video vom neuesten RSS-Item">
-                                        📺 Latest RSS Video
+                                        📺 Latest
                                     </button>
                                     <button class="example-prompt" id="browseRssBtn"
                                         style="border-color: var(--secondary);">
-                                        🔍 RSS Feed durchsuchen
+                                        🔍 Durchsuchen & Analysieren
                                     </button>
                                 </div>
 
@@ -295,6 +297,28 @@
 
     <input type="file" id="fileInput" multiple style="display: none;">
 
+    <!-- Scenario Parameters Modal -->
+    <div class="modal" id="scenarioParamsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="scenarioParamsTitle">Szenario Parameter</h2>
+                <button class="btn-close" id="closeScenarioParams">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="scenarioParamsBody">
+                <!-- Dynamically populated -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelScenarioParams">Abbrechen</button>
+                <button class="btn-primary" id="confirmExecuteScenario">🚀 Ausführen</button>
+            </div>
+        </div>
+    </div>
+
     <div class="version-info" id="versionInfo"
         style="position: fixed; bottom: 10px; right: 10px; font-size: 0.8rem; color: var(--text-muted); opacity: 0.7;">
         v1.0.0
@@ -329,18 +353,122 @@
     <!-- Markdown Parser -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-    <script src="version.js?v=17"></script>
-    <script src="result-normalizer.js?v=17"></script>
-    <script src="example-handler.js?v=17"></script>
-    <script src="progress-tracker.js?v=17"></script>
+    <script src="version.js?v=18"></script>
+    <script src="result-normalizer.js?v=18"></script>
+    <script src="example-handler.js?v=18"></script>
+    <script src="progress-tracker.js?v=18"></script>
 
     <!-- 🆕 Smart Detection Features -->
-    <script src="smart-detector.js?v=17"></script>
-    <script src="one-click-workflows.js?v=17"></script>
+    <script src="smart-detector.js?v=18"></script>
+    <script src="one-click-workflows.js?v=18"></script>
 
-    <script src="app.js?v=17"></script>
-    <script src="job-queue.js?v=17"></script>
-    <script src="progress-integration.js?v=17"></script>
+    <script src="app.js?v=18"></script>
+    <script src="job-queue.js?v=18"></script>
+    <script src="progress-integration.js?v=18"></script>
+    <!-- RSS Settings Modal -->
+    <div class="rss-settings-modal" id="rssSettingsModal">
+        <div class="rss-modal-content">
+            <div class="rss-modal-header">
+                <h3>🛠️ RSS Video Einstellungen</h3>
+                <button class="btn-close" id="closeRssSettings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="24" height="24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="rss-modal-body">
+                <!-- Background Music -->
+                <div class="rss-form-group">
+                    <label>🎵 Hintergrundmusik URL</label>
+                    <input type="text" id="rssMusicUrl" class="rss-input-text"
+                        placeholder="https://example.com/music.mp3" list="rssMusicList">
+                    <datalist id="rssMusicList">
+                        <!-- Populated by JS -->
+                    </datalist>
+                    <small>Optional. Wird mit 20% Lautstärke unter die Stimme gelegt.</small>
+                </div>
+
+                <!-- Video Resolution -->
+                <div class="rss-form-group">
+                    <label>📐 Video-Format</label>
+                    <div class="resolution-grid">
+                        <div class="res-option selected" data-w="1280" data-h="720">
+                            <div class="res-icon">📺</div>
+                            <div class="res-label">Landscape<br>(16:9)</div>
+                        </div>
+                        <div class="res-option" data-w="1080" data-h="1920">
+                            <div class="res-icon">📱</div>
+                            <div class="res-label">Portrait<br>(9:16)</div>
+                        </div>
+                        <div class="res-option" data-w="1080" data-h="1080">
+                            <div class="res-icon">🟦</div>
+                            <div class="res-label">Square<br>(1:1)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Font Selection -->
+                <div class="rss-form-group">
+                    <label>🔡 Schriftart für Untertitel</label>
+                    <select id="rssFontFamily" class="rss-input-text">
+                        <option value="Arial">Arial (Standard)</option>
+                        <option value="Roboto">Roboto</option>
+                        <option value="Impact">Impact (Bold)</option>
+                        <option value="Courier New">Courier New (Monospace)</option>
+                        <option value="Verdana">Verdana</option>
+                        <option value="Georgia">Georgia</option>
+                    </select>
+                </div>
+
+                <!-- Language Selection -->
+                <div class="rss-form-group">
+                    <label>🌐 Sprache (Transkription/Stimme)</label>
+                    <select id="rssLanguage" class="rss-input-text">
+                        <option value="de">Deutsch (Standard)</option>
+                        <option value="en">Englisch</option>
+                        <option value="fr">Französisch</option>
+                        <option value="es">Spanisch</option>
+                        <option value="it">Italienisch</option>
+                    </select>
+                </div>
+
+
+                <!-- Subtitles Toggle -->
+                <div class="rss-form-group">
+                    <div class="rss-toggle-wrapper" id="subtitleToggleWrapper">
+                        <div class="rss-toggle-label">
+                            <div class="rss-toggle-title">📝 Untertitel (SRT Sync)</div>
+                            <div class="rss-toggle-desc">Generiert autom. Untertitel via KI</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="rssSubtitleToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Zoom/Pan Toggle -->
+                <div class="rss-form-group">
+                    <div class="rss-toggle-wrapper" id="zoomPanToggleWrapper">
+                        <div class="rss-toggle-label">
+                            <div class="rss-toggle-title">🔍 Zoom & Pan Effekt</div>
+                            <div class="rss-toggle-desc">Aktiviert dynamischen Ken-Burns-Effekt</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="rssZoomPanToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="rss-modal-footer">
+                <button class="btn-secondary" id="cancelRssSettings">Abbrechen</button>
+                <button class="btn-primary" id="startRssGeneration">🚀 Video generieren</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 
 </html>

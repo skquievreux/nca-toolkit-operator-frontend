@@ -39,7 +39,13 @@ const elements = {
     scenariosModal: document.getElementById('scenariosModal'),
     scenariosList: document.getElementById('scenariosList'),
     editorContent: document.getElementById('editorContent'),
-    editorEmptyState: document.getElementById('editorEmptyState')
+    editorEmptyState: document.getElementById('editorEmptyState'),
+    scenarioParamsModal: document.getElementById('scenarioParamsModal'),
+    scenarioParamsTitle: document.getElementById('scenarioParamsTitle'),
+    scenarioParamsBody: document.getElementById('scenarioParamsBody'),
+    confirmExecuteScenario: document.getElementById('confirmExecuteScenario'),
+    closeScenarioParams: document.getElementById('closeScenarioParams'),
+    cancelScenarioParams: document.getElementById('cancelScenarioParams')
 };
 
 // ===== Drag & Drop Setup =====
@@ -806,20 +812,104 @@ document.getElementById('deleteScenarioBtn').onclick = async () => {
     }
 }
 
-document.getElementById('executeScenarioBtn').onclick = async () => {
+document.getElementById('executeScenarioBtn').onclick = () => {
     const id = state.currentScenarioId;
-    const s = state.allScenarios[id];
+    // Use custom modal for parameters
+    openScenarioParams(id);
+};
 
-    // Prompt for required parameters
-    const inputs = {};
-    if (s.parameters) {
-        for (const p of s.parameters) {
-            const val = prompt(`${p.description} (${p.name}):`, p.default || '');
-            if (val === null && p.required) return;
-            inputs[p.name] = val;
-        }
+function openScenarioParams(scenarioId) {
+    const s = state.allScenarios[scenarioId];
+    if (!s) return;
+
+    elements.scenarioParamsTitle.textContent = `🎬 ${s.name} - Parameter`;
+    elements.scenarioParamsBody.innerHTML = '';
+
+    if (s.parameters && s.parameters.length > 0) {
+        s.parameters.forEach(p => {
+            const formGroup = document.createElement('div');
+            formGroup.className = 'form-group';
+
+            const label = document.createElement('label');
+            label.textContent = `${p.description || p.name} (${p.name})`;
+            formGroup.appendChild(label);
+
+            const isVoiceParam = p.name.toLowerCase().includes('voice') ||
+                (p.description && p.description.toLowerCase().includes('voice')) ||
+                (p.description && p.description.toLowerCase().includes('stimme'));
+
+            if (isVoiceParam) {
+                // ElevenLabs Voice Dropdown
+                const select = document.createElement('select');
+                select.className = 'rss-input-text';
+                select.id = `param_${p.name}`;
+
+                // Fetch voices if not already done or use cached
+                // We reuse the existing logic from app.js if possible
+                const AdamOption = document.createElement('option');
+                AdamOption.value = 'Adam';
+                AdamOption.textContent = 'Adam (Standard)';
+                select.appendChild(AdamOption);
+
+                // Trigger fetch/update
+                fetchVoicesForSelect(select, p.default || 'Adam');
+
+                formGroup.appendChild(select);
+            } else {
+                // Standard Text Input
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'rss-input-text';
+                input.id = `param_${p.name}`;
+                input.value = p.default || '';
+                formGroup.appendChild(input);
+            }
+
+            elements.scenarioParamsBody.appendChild(formGroup);
+        });
+    } else {
+        const p = document.createElement('p');
+        p.textContent = 'Dieses Szenario erfordert keine zusätzlichen Parameter.';
+        elements.scenarioParamsBody.appendChild(p);
     }
 
+    elements.scenarioParamsModal.classList.add('active');
+
+    // Handling confirm
+    elements.confirmExecuteScenario.onclick = () => {
+        const inputs = {};
+        if (s.parameters) {
+            s.parameters.forEach(p => {
+                const el = document.getElementById(`param_${p.name}`);
+                if (el) inputs[p.name] = el.value;
+            });
+        }
+
+        elements.scenarioParamsModal.classList.remove('active');
+        executeScenarioFinal(scenarioId, inputs);
+    };
+
+    elements.closeScenarioParams.onclick = () => elements.scenarioParamsModal.classList.remove('active');
+    elements.cancelScenarioParams.onclick = () => elements.scenarioParamsModal.classList.remove('active');
+}
+
+async function fetchVoicesForSelect(selectEl, defaultValue) {
+    try {
+        const response = await fetch(`${CONFIG.apiUrl}/api/voice/voices`);
+        const data = await response.json();
+
+        if (data.success && data.voices) {
+            selectEl.innerHTML = data.voices.map(v =>
+                `<option value="${v.voice_id}" ${v.voice_id === defaultValue || v.name === defaultValue ? 'selected' : ''}>${v.name} (${v.category})</option>`
+            ).join('');
+        }
+    } catch (e) {
+        console.error("Error populating scenario voice select:", e);
+    }
+}
+
+async function executeScenarioFinal(id, inputs) {
+    const s = state.allScenarios[id];
     elements.scenariosModal.classList.remove('active');
 
     // Start progress
@@ -1030,6 +1120,8 @@ function resetToLandingPage() {
 window.removeFile = removeFile;
 window.showLogs = showLogs;
 window.resetToLandingPage = resetToLandingPage;
+window.handleRssVideoGeneration = handleRssVideoGeneration;
+window.handleBrowseRss = handleBrowseRss;
 
 // 🆕 Initialize Smart Detection
 let smartDetector = null;
@@ -1053,6 +1145,7 @@ if (typeof SmartFileDetector !== 'undefined' && typeof OneClickWorkflows !== 'un
 setupDragAndDrop();
 loadScenarios(); // Auto-load scenarios on start
 checkLastConversation(); // Auto-load last conv if exists
+checkServerVersion(); // Fetch backend version and Run-ID
 
 // Initialize Job Queue (CRITICAL for job visibility!)
 // Job Queue is initialized in job-queue.js now
@@ -1086,11 +1179,33 @@ if (typeof APP_VERSION !== 'undefined') {
 }
 
 addLogMessage(`🚀 NCA Toolkit AI Assistant geladen!`, 'success');
-addLogMessage(`📡 Backend URL: ${CONFIG.apiUrl}`, 'info');
-
-console.log('Backend URL:', CONFIG.apiUrl);
-console.log('Drag & Drop: Aktiviert');
 console.log('Live-Logs: Aktiviert');
+
+
+async function checkServerVersion() {
+    try {
+        const response = await fetch(`${CONFIG.apiUrl}/api/health`);
+        const data = await response.json();
+        if (data.status === 'healthy') {
+            const versionStr = `Backend: v${data.version} | Build: ${data.build} | Run: ${data.run_id}`;
+            console.log(`📡 ${versionStr}`);
+            addLogMessage(`📡 ${versionStr}`, 'info');
+
+            // Show run-id in log area if possible or just as log message
+            // If there's a dedicated version info, append it
+            const versionInfo = document.getElementById('versionInfo');
+            if (versionInfo) {
+                const span = document.createElement('span');
+                span.style.marginLeft = '10px';
+                span.style.opacity = '0.7';
+                span.innerHTML = `| Server: <b title="Run-ID: ${data.run_id}">${data.version}</b>`;
+                versionInfo.appendChild(span);
+            }
+        }
+    } catch (e) {
+        console.warn("⚠️ Failed to fetch server version", e);
+    }
+}
 
 
 function renderResultData(result) {
@@ -1206,12 +1321,14 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function handleRssVideoGeneration(item = null) {
+    const rssUrl = document.getElementById('rssUrlInput')?.value;
+
     // Hide welcome message
     const welcomeMsg = document.querySelector('.welcome-message');
     if (welcomeMsg) welcomeMsg.style.display = 'none';
 
     const title = item ? item.title : 'neuesten RSS-Item';
-    addMessage('user', `📺 Generiere Video von: ${title}`);
+    addMessage('user', `📺 Generiere Video von: ${title} ${rssUrl ? `(Feed: ${rssUrl})` : ''}`);
 
     const processingMsg = addMessage('assistant', '🤖 Initialisiere RSS-Processing...');
     const progressDiv = createProgressBar();
@@ -1224,16 +1341,34 @@ async function handleRssVideoGeneration(item = null) {
         if (progressFill) progressFill.style.width = '20%';
         if (progressText) progressText.textContent = 'Bereite Media-URLs vor...';
 
-        const body = item ? JSON.stringify({
+        // Merge Item Data with Config Data
+        const payload = item ? {
             image_url: item.image_url,
             audio_url: item.audio_url,
             title: item.title
-        }) : JSON.stringify({});
+        } : {
+            url: rssUrl
+        };
+
+        // Add User Configs
+        payload.width = rssConfig.width;
+        payload.height = rssConfig.height;
+        if (rssConfig.musicUrl) payload.background_music_url = rssConfig.musicUrl;
+        if (rssConfig.subtitles) {
+            payload.render_subtitles = true;
+            payload.font_family = rssConfig.fontFamily || 'Arial';
+        }
+        payload.zoom_pan = rssConfig.zoomPan; // Add zoomPan to payload
+        payload.voice_id = rssConfig.voiceId || 'Adam'; // Add voiceId to payload
+        payload.language = rssConfig.language || 'de'; // Add language to payload
+        payload.conversation_id = CONFIG.conversationId; // Add current conversation ID
+
+        console.log("🚀 Sending RSS Payload:", payload);
 
         const response = await fetch(`${CONFIG.apiUrl}/api/rss/process`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: body
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
@@ -1242,6 +1377,19 @@ async function handleRssVideoGeneration(item = null) {
         }
 
         const data = await response.json();
+
+        // Handle background job response
+        if (data.job_id) {
+            // Processing message is already added at the start of catch block? 
+            // No, it's added at the start of handleRssVideoGeneration
+            if (progressText) progressText.textContent = 'Job gestartet...';
+            // Trigger job polling if needed (usually handled by job-queue.js)
+            if (window.addJobToQueue) {
+                window.addJobToQueue(data.job_id);
+            }
+            addLogMessage(`📺 RSS Job gestartet (ID: ${data.job_id})`, 'info');
+            return;
+        }
 
         if (progressFill) progressFill.style.width = '100%';
         if (progressText) progressText.textContent = 'Fertig!';
@@ -1273,46 +1421,70 @@ async function handleRssVideoGeneration(item = null) {
 }
 
 async function handleBrowseRss() {
-    addLogMessage('🔍 Lade RSS Feed...');
+    const rssUrl = document.getElementById('rssUrlInput')?.value;
+    addLogMessage(`🔍 Analysiere RSS Feed: ${rssUrl}...`);
+
     try {
-        const resp = await fetch(`${CONFIG.apiUrl}/api/rss/list`);
+        const urlParams = rssUrl ? `?url=${encodeURIComponent(rssUrl)}` : '';
+        const resp = await fetch(`${CONFIG.apiUrl}/api/rss/list${urlParams}`);
         const data = await resp.json();
 
         if (data.success) {
-            showRssBrowser(data.items);
+            showRssBrowser(data.items, rssUrl);
+        } else {
+            throw new Error(data.error || 'Fehler beim Laden');
         }
     } catch (error) {
-        addLogMessage('❌ Fehler beim Laden des Feeds', 'error');
-        alert('Fehler beim Laden des Feeds');
+        addLogMessage(`❌ Fehler beim Laden des Feeds: ${error.message}`, 'error');
+        alert(`Fehler beim Laden des Feeds: ${error.message}`);
     }
 }
 
-function showRssBrowser(items) {
+function showRssBrowser(items, feedUrl) {
     const modal = document.createElement('div');
     modal.className = 'modal active';
     modal.style.zIndex = '10002';
 
-    const itemsHtml = items.map(item => `
+    const itemsHtml = items.map(item => {
+        const hasAudio = item.analysis && item.analysis.has_audio;
+        const hasImage = item.analysis && item.analysis.has_image;
+
+        // Escape helper
+        const safeItem = JSON.stringify(item).replace(/"/g, '&quot;');
+
+        return `
         <div class="rss-browser-item" style="display: flex; gap: 15px; padding: 15px; border-bottom: 1px solid var(--border-color); align-items: center; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
-            <img src="${item.image_url}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px;">
+            <div style="position: relative;">
+                <img src="${item.image_url || 'https://via.placeholder.com/80?text=No+Image'}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid ${hasImage ? '#22c55e' : '#ef4444'}">
+                ${!hasImage ? '<span style="position: absolute; top: 0; left: 0; background: #ef4444; color: white; font-size: 10px; padding: 2px 4px; border-radius: 4px;">Kein Bild</span>' : ''}
+            </div>
             <div style="flex: 1;">
                 <h4 style="margin: 0 0 5px 0; font-size: 1rem;">${item.title}</h4>
-                <div style="font-size: 0.8rem; color: var(--text-muted);">
-                    ${item.audio_url ? '🎵 Audio verfügbar' : '❌ Kein Audio'}
+                <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; gap: 10px;">
+                    <span style="color: ${hasAudio ? '#22c55e' : '#ef4444'}">${hasAudio ? '🎵 Audio erkannt' : '❌ Kein Audio'}</span>
+                    <span>Format: ${item.analysis?.source_format || 'RSS'}</span>
                 </div>
             </div>
-            <button class="btn-primary btn-sm" onclick="this.closest('.modal').remove(); window.handleRssVideoGeneration(${JSON.stringify(item).replace(/"/g, '&quot;')})">Video bauen</button>
+            <button class="btn-primary btn-sm" 
+                    ${(!hasAudio || !hasImage) ? 'disabled title="Bild und Audio erforderlich"' : ''}
+                    onclick="this.closest('.modal').remove(); window.openRssSettings(${safeItem})">
+                Video bauen
+            </button>
         </div>
-    `).join('');
+    `;
+    }).join('');
 
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
-                <h2>📡 RSS Feed Browser</h2>
+                <div>
+                    <h2>📡 RSS Feed Browser</h2>
+                    <small style="color: var(--text-muted);">${feedUrl || 'Default Feed'}</small>
+                </div>
                 <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
             </div>
             <div class="modal-body" style="max-height: 500px; overflow-y: auto; padding: 0;">
-                ${itemsHtml}
+                ${itemsHtml || '<p style="padding: 20px; text-align: center;">Keine Einträge gefunden oder Struktur nicht kompatibel.</p>'}
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" onclick="this.closest('.modal').remove()">Schließen</button>
@@ -1321,5 +1493,212 @@ function showRssBrowser(items) {
     `;
 
     document.body.appendChild(modal);
-    window.handleRssVideoGeneration = (item) => handleRssVideoGeneration(item);
 }
+
+// ===== RSS Settings Modal Logic =====
+const rssElements = {
+    // initialized in initRssModal
+};
+
+const rssConfig = {
+    width: 1280,
+    height: 720,
+    musicUrl: '',
+    fontFamily: 'Arial',
+    voiceId: 'Adam',
+    language: 'de',
+    subtitles: true, // Default to true
+    zoomPan: false, // Default to false
+    selectedItem: null,
+    musicHistory: []
+};
+
+function loadRssConfig() {
+    const saved = localStorage.getItem('nca_rss_config');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            // Merge with defaults, ensuring new properties are handled
+            rssConfig.width = parsed.width || rssConfig.width;
+            rssConfig.height = parsed.height || rssConfig.height;
+            rssConfig.musicUrl = parsed.musicUrl || rssConfig.musicUrl;
+            rssConfig.subtitles = parsed.subtitles !== undefined ? parsed.subtitles : rssConfig.subtitles;
+            rssConfig.fontFamily = parsed.fontFamily || rssConfig.fontFamily;
+            rssConfig.voiceId = parsed.voiceId || rssConfig.voiceId;
+            rssConfig.zoomPan = parsed.zoomPan !== undefined ? parsed.zoomPan : rssConfig.zoomPan;
+            rssConfig.language = parsed.language || rssConfig.language;
+            rssConfig.musicHistory = parsed.musicHistory || rssConfig.musicHistory;
+            console.log("💾 RSS Config loaded:", rssConfig);
+        } catch (e) { console.error("Error loading RSS config", e); }
+    }
+}
+
+function saveRssConfig() {
+    const toSave = { ...rssConfig };
+    delete toSave.selectedItem; // Don't persist selected item
+    localStorage.setItem('nca_rss_config', JSON.stringify(toSave));
+}
+
+function updateRssModalUI() {
+    if (!rssElements.modal) return;
+
+    if (rssElements.musicInput) rssElements.musicInput.value = rssConfig.musicUrl || '';
+    if (rssElements.subtitleToggle) rssElements.subtitleToggle.checked = rssConfig.subtitles;
+    if (rssElements.zoomPanToggle) rssElements.zoomPanToggle.checked = rssConfig.zoomPan;
+    if (rssElements.fontSelect) rssElements.fontSelect.value = rssConfig.fontFamily || 'Arial';
+    if (rssElements.languageSelect) rssElements.languageSelect.value = rssConfig.language || 'de';
+
+    if (rssElements.resOptions) {
+        rssElements.resOptions.forEach(opt => {
+            const w = parseInt(opt.dataset.w);
+            const h = parseInt(opt.dataset.h);
+            if (w === rssConfig.width && h === rssConfig.height) {
+                opt.classList.add('selected');
+            } else {
+                opt.classList.remove('selected');
+            }
+        });
+    }
+
+    updateMusicDatalist();
+}
+
+function updateMusicDatalist() {
+    if (!rssElements.musicList) return;
+
+    // Default suggestions if none in history
+    const defaults = [
+        'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+        'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3'
+    ];
+
+    const combined = [...new Set([...(rssConfig.musicHistory || []), ...defaults])];
+
+    rssElements.musicList.innerHTML = combined
+        .map(url => `<option value="${url}">`)
+        .join('');
+}
+
+
+function addToMusicHistory(url) {
+    if (!url) return;
+    if (!rssConfig.musicHistory) rssConfig.musicHistory = [];
+
+    // Remove if exists to move to top
+    rssConfig.musicHistory = rssConfig.musicHistory.filter(item => item !== url);
+    rssConfig.musicHistory.unshift(url);
+
+    // Limit to 10
+    if (rssConfig.musicHistory.length > 10) {
+        rssConfig.musicHistory = rssConfig.musicHistory.slice(0, 10);
+    }
+
+    saveRssConfig();
+    updateMusicDatalist();
+}
+
+function initRssModal() {
+    try {
+        // Get elements
+        rssElements.modal = document.getElementById('rssSettingsModal');
+        rssElements.closeBtn = document.getElementById('closeRssSettings');
+        rssElements.cancelBtn = document.getElementById('cancelRssSettings');
+        rssElements.startBtn = document.getElementById('startRssGeneration');
+        rssElements.musicInput = document.getElementById('rssMusicUrl');
+        rssElements.resOptions = document.querySelectorAll('.res-option');
+        rssElements.subtitleToggle = document.getElementById('rssSubtitleToggle');
+        rssElements.zoomPanToggle = document.getElementById('rssZoomPanToggle');
+        rssElements.fontSelect = document.getElementById('rssFontFamily');
+        rssElements.languageSelect = document.getElementById('rssLanguage');
+        rssElements.musicList = document.getElementById('rssMusicList');
+        rssElements.generateBtn = document.getElementById('generateRssVideoBtn'); // The button in example-prompts
+
+        if (!rssElements.generateBtn) return;
+
+        // Load saved config
+        loadRssConfig();
+        updateRssModalUI();
+
+        // Override the default behavior of the generate button
+        rssElements.generateBtn.removeAttribute('data-prompt'); // Remove prompt to prevent auto-send
+        // Clone to remove old listeners
+        const newBtn = rssElements.generateBtn.cloneNode(true);
+        rssElements.generateBtn.parentNode.replaceChild(newBtn, rssElements.generateBtn);
+        rssElements.generateBtn = newBtn;
+
+        rssElements.generateBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openRssSettings(null);
+        };
+
+        // Resolution Selection
+        rssElements.resOptions.forEach(opt => {
+            opt.onclick = () => {
+                rssElements.resOptions.forEach(o => o.classList.remove('selected'));
+                opt.classList.add('selected');
+                const w = parseInt(opt.dataset.w);
+                const h = parseInt(opt.dataset.h);
+                rssConfig.width = w;
+                rssConfig.height = h;
+                saveRssConfig();
+                console.log("Selected resolution:", w, h);
+            };
+        });
+
+        // Close / Cancel
+        const closeRss = () => {
+            if (rssElements.modal) rssElements.modal.classList.remove('active');
+        };
+        if (rssElements.closeBtn) rssElements.closeBtn.onclick = closeRss;
+        if (rssElements.cancelBtn) rssElements.cancelBtn.onclick = closeRss;
+
+        // Start Generation
+        if (rssElements.startBtn) {
+            rssElements.startBtn.onclick = () => {
+                rssConfig.musicUrl = rssElements.musicInput.value ? rssElements.musicInput.value.trim() : '';
+                rssConfig.subtitles = rssElements.subtitleToggle ? rssElements.subtitleToggle.checked : true;
+                rssConfig.zoomPan = rssElements.zoomPanToggle ? rssElements.zoomPanToggle.checked : false;
+                rssConfig.fontFamily = rssElements.fontSelect ? rssElements.fontSelect.value : 'Arial';
+                rssConfig.language = rssElements.languageSelect ? rssElements.languageSelect.value : 'de';
+
+                saveRssConfig();
+                addToMusicHistory(rssConfig.musicUrl);
+
+                closeRss(); // Use the local closeRss function
+
+                startRssGenerationProcess();
+            };
+        }
+    } catch (e) {
+        console.error("❌ Error initializing RSS Modal:", e);
+    }
+}
+
+function openRssSettings(item = null) {
+    rssConfig.selectedItem = item;
+    updateRssModalUI(); // Update UI with current config and selected item (if any)
+
+    // Optional: Update Title in Modal if item selected?
+    // For now just open it
+    if (rssElements.modal) {
+        rssElements.modal.classList.add('active');
+        // Reset Inputs or Keep? Let's keep for convenience or reset?
+        // Let's keep music input but maybe visual feedback on item?
+    }
+}
+
+function startRssGenerationProcess() {
+    // Use the Direct API handler with the config we just set
+    handleRssVideoGeneration(rssConfig.selectedItem);
+}
+
+// Global Exports
+window.openRssSettings = openRssSettings;
+window.handleRssVideoGeneration = handleRssVideoGeneration;
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    // Wait a brief moment for dynamic elements
+    setTimeout(initRssModal, 1000);
+});

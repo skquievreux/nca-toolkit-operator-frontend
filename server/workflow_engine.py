@@ -2,8 +2,9 @@ import json
 import logging
 import re
 import requests
-from llm_service import extract_intent_and_params, SYSTEM_PROMPT, configure_gemini
+from llm_service import extract_intent_and_params, configure_gemini
 import google.generativeai as genai
+import api_helpers
 
 logger = logging.getLogger(__name__)
 
@@ -92,11 +93,30 @@ class WorkflowEngine:
         return results
 
     def _call_nca(self, endpoint, params):
-        url = f"{self.nca_api_url}{endpoint}"
-        headers = {'x-api-key': self.nca_api_key, 'Content-Type': 'application/json'}
-        resp = requests.post(url, headers=headers, json=params, timeout=600)
-        resp.raise_for_status()
-        return resp.json()
+        """Robust calling of NCA API with validation and mapping"""
+        logger.debug(f"🌐 Workflow step calling NCA: {endpoint}")
+        
+        # This will resolve aliases like /transcribe -> /v1/media/transcribe
+        # and map parameter names automatically
+        try:
+            params = api_helpers.validate_and_map_params(endpoint, params)
+        except ValueError as e:
+            logger.error(f"❌ Workflow validation error: {e}")
+            raise
+
+        response = api_helpers.safe_api_call(
+            endpoint=endpoint,
+            params=params,
+            nca_api_url=self.nca_api_url,
+            nca_api_key=self.nca_api_key
+        )
+        
+        if not response['success']:
+            error_msg = response.get('error', 'Unknown error')
+            logger.error(f"❌ Workflow step failed: {error_msg}")
+            raise Exception(f"API Step failed ({endpoint}): {error_msg}")
+            
+        return response['data']
 
     def _call_llm(self, prompt):
         # Ensure Gemini is configured

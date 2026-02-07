@@ -78,31 +78,65 @@ def download_youtube_video(url, format='best'):
     try:
         import yt_dlp
         
-        # Configure yt-dlp options
+        # Determine format based on parameter
+        # Use robust format strings that prefer mp4/m4a for better compatibility with FFmpeg
+        format_spec = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+        if format == 'bestaudio':
+             format_spec = 'bestaudio[ext=m4a]/bestaudio/best'
+
+        # Configure yt-dlp options for maximum reliability
         ydl_opts = {
-            'format': format,
+            'format': format_spec,
             'outtmpl': output_template,
             'noplaylist': True,
             'quiet': False,
             'no_warnings': False,
+            'nocheckcertificate': True,
+            'ignoreerrors': False,
+            # Common headers to behave like a browser
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+            }
         }
         
-        logger.info(f"🎬 Downloading with yt-dlp...")
+        # Check if ffmpeg is available and tell yt-dlp where it is if possible
+        try:
+             import subprocess
+             result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
+             if result.returncode == 0:
+                  logger.info("🎬 FFmpeg detected by yt-dlp")
+        except:
+             logger.warning("⚠️ FFmpeg NOT detected in PATH for yt-dlp")
+
+        logger.info(f"🎬 Downloading with yt-dlp (Format: {format_spec})...")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Extract info
+            # Extract info and download
             info = ydl.extract_info(url, download=True)
             
-            # Get the actual filename
+            # Get the actual filename (extension might change from template)
             filename = ydl.prepare_filename(info)
             
+            # If the format selected was a merge (v+a), extension might be .mp4 even if template had none
             if not os.path.exists(filename):
-                raise FileNotFoundError(f"Downloaded file not found: {filename}")
+                # Try finding file with any extension if exact match fails
+                base_part = os.path.splitext(filename)[0]
+                matches = list(Path(UPLOAD_FOLDER).glob(f"{os.path.basename(base_part)}.*"))
+                if matches:
+                    filename = str(matches[0])
+                else:
+                    raise FileNotFoundError(f"Downloaded file not found: {filename}")
             
             title = info.get('title', 'Unknown')
             duration = info.get('duration', 0)
+            file_size = os.path.getsize(filename)
             
-            logger.info(f"✅ Downloaded: {title} ({duration}s)")
+            if file_size == 0:
+                 raise RuntimeError("Downloaded file is empty (0 bytes)")
+
+            logger.info(f"✅ Downloaded: {title} ({duration}s, {file_size} bytes)")
             
             # Generate URL that Docker container can access
             basename = os.path.basename(filename)
