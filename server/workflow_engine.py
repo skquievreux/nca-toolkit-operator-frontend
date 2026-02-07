@@ -5,6 +5,7 @@ import requests
 from llm_service import extract_intent_and_params, configure_gemini
 import google.generativeai as genai
 import api_helpers
+from api_helpers import normalize_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,9 @@ class WorkflowEngine:
 
     def _call_nca(self, endpoint, params):
         """Robust calling of NCA API with validation and mapping"""
+        # 0. Canonical normalization
+        endpoint = normalize_endpoint(endpoint)
+        
         logger.debug(f"🌐 Workflow step calling NCA: {endpoint}")
         
         # This will resolve aliases like /transcribe -> /v1/media/transcribe

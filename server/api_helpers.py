@@ -134,59 +134,85 @@ def safe_api_call(
 # CENTRALIZED SCHEMA REGISTRY & VALIDATION
 # ============================================================================
 
+# Maps various endpoint names to the definitive canonical endpoint
+ENDPOINT_MAP = {
+    '/transcribe': '/v1/media/transcribe',
+    '/v1/media/transcribe': '/v1/media/transcribe',
+    '/media-to-mp3': '/v1/media/convert/mp3',
+    '/v1/media/convert/mp3': '/v1/media/convert/mp3',
+    '/audio-mixing': '/v1/video/add/audio',
+    '/v1/video/add/audio': '/v1/video/add/audio',
+    '/combine-videos': '/v1/video/concatenate',
+    '/v1/video/concatenate': '/v1/video/concatenate',
+    '/image-to-video': '/v1/image/convert/image_to_video',
+    '/v1/image/convert/image_to_video': '/v1/image/convert/image_to_video',
+    '/screenshot': '/v1/image/screenshot/webpage',
+    '/v1/image/screenshot/webpage': '/v1/image/screenshot/webpage'
+}
+
 NCA_SCHEMA = {
     '/v1/media/transcribe': {
         'required': ['media_url'],
         'aliases': {'url': 'media_url', 'video_url': 'media_url', 'audio_url': 'media_url', 'file_url': 'media_url'}
     },
-    '/transcribe': { # Legacy support
-        'required': ['media_url'],
-        'aliases': {'url': 'media_url', 'video_url': 'media_url', 'audio_url': 'media_url'}
-    },
-    '/audio-mixing': {
-        'required': ['video_url', 'audio_url'],
-        'aliases': {'media_url': 'video_url'} # Fallback mapping
-    },
     '/v1/video/add/audio': {
         'required': ['video_url', 'audio_url'],
-        'aliases': {'media_url': 'video_url'}
+        'aliases': {'media_url': 'video_url', 'url': 'video_url'}
+    },
+    '/v1/video/concatenate': {
+        'required': ['video_urls'],
+        'aliases': {'media_urls': 'video_urls', 'urls': 'video_urls'}
+    },
+    '/v1/media/convert/mp3': {
+        'required': ['media_url'],
+        'aliases': {'url': 'media_url'}
     },
     '/v1/image/convert/image_to_video': {
         'required': ['image_url'],
         'aliases': {'url': 'image_url', 'media_url': 'image_url'}
     },
-    '/v1/video/download': {
+    '/v1/image/screenshot/webpage': {
         'required': ['url'],
-        'aliases': {'video_url': 'url', 'media_url': 'url'}
-    },
-    '/api/rss/process': {
-        'required': ['image_url', 'audio_url'],
-        'aliases': {}
+        'aliases': {'site_url': 'url', 'web_url': 'url', 'media_url': 'url'}
     }
 }
+
+def normalize_endpoint(endpoint: str) -> str:
+    """Mappt beliebige Endpunkt-Strings auf die kanonische Version"""
+    return ENDPOINT_MAP.get(endpoint, endpoint)
 
 def validate_and_map_params(endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validiert Parameter gegen das Schema und mappt Aliase automatisch.
     Führt zu einem robusten Backend, das LLM-Varianz verzeiht.
     """
-    if endpoint not in NCA_SCHEMA:
-        logger.debug(f"ℹ️ No schema for endpoint {endpoint}, passing as-is")
+    # 1. Endpunkt normalisieren
+    canonical_endpoint = normalize_endpoint(endpoint)
+    
+    if canonical_endpoint not in NCA_SCHEMA:
+        logger.debug(f"ℹ️ No schema for canonical endpoint {canonical_endpoint}, passing as-is")
         return params
 
-    schema = NCA_SCHEMA[endpoint]
+    schema = NCA_SCHEMA[canonical_endpoint]
     mapped_params = params.copy()
 
-    # 1. Alias-Mapping
+    # 2. Alias-Mapping
     for alias, target in schema.get('aliases', {}).items():
         if alias in mapped_params and target not in mapped_params:
             mapped_params[target] = mapped_params[alias]
             logger.debug(f"🔗 Mapped alias: {alias} -> {target}")
 
-    # 2. Pflichtfeld-Check
+    # 3. Pflichtfeld-Check
     missing = [p for p in schema.get('required', []) if p not in mapped_params or not mapped_params[p]]
     if missing:
-        raise ValueError(f"❌ Missing required parameters for {endpoint}: {', '.join(missing)}")
+        # Letzter Versuch: Falls wir nur EINEN Parameter haben und nur EINEN brauchen, mappen wir ihn einfach
+        if len(mapped_params) == 1 and len(schema.get('required', [])) == 1:
+            val = next(iter(mapped_params.values()))
+            target = schema.get('required', [])[0]
+            mapped_params[target] = val
+            logger.warning(f"💡 Auto-mapped single parameter to {target}")
+        else:
+            raise ValueError(f"❌ Missing required parameters for {canonical_endpoint}: {', '.join(missing)}")
 
     return mapped_params
 

@@ -30,7 +30,7 @@ import local_processor  # Local FFmpeg support
 # Import LLM/Workflow services AFTER load_dotenv
 from llm_service import extract_intent_and_params, transcribe_media
 from workflow_engine import WorkflowEngine
-from api_helpers import safe_api_call, validate_params, validate_and_map_params
+from api_helpers import safe_api_call, validate_params, validate_and_map_params, normalize_endpoint
 import api_helpers
 import rss_service
 
@@ -597,6 +597,10 @@ def process_job_async(job_id, user_message, conversation_id, uploaded_files, lan
             
         # 1.5 Robust Validation & Mapping
         try:
+            # Endpunkt normalisieren (Alias-Support)
+            endpoint = normalize_endpoint(endpoint)
+            db_service.update_job(job_id, {'endpoint': endpoint})
+            
             job_params = validate_and_map_params(endpoint, job_params)
             # Update params in DB (serialize to JSON string)
             db_service.update_job(job_id, {'params': json.dumps(job_params)})
@@ -816,6 +820,9 @@ def process_request():
 
 def call_nca_api(endpoint, params):
     """Call NCA Toolkit API"""
+    
+    # 0. Normalize endpoint early
+    endpoint = normalize_endpoint(endpoint)
     
     # SPECIAL HANDLING: Test Endpoint
     if endpoint == '/v1/toolkit/test':
