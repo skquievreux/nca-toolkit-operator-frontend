@@ -154,7 +154,42 @@ def local_audio_mixing(video_url, audio_url, background_music_url=None, music_vo
         logger.exception("Local processing failed")
         raise e
 
-# ... (create_thumbnail, local_audio_concat, create_video_from_image_and_audio skipped/unchanged) ...
+def create_thumbnail(video_url, timestamp="00:00:01"):
+    """
+    Erstellt ein Thumbnail aus einem Video an einem bestimmten Timestamp.
+    """
+    video_path = url_to_path(video_url)
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"Video file not found: {video_path}")
+        
+    output_filename = f"thumb_{uuid.uuid4().hex[:8]}.jpg"
+    output_path = os.path.join(UPLOAD_FOLDER, output_filename)
+    
+    cmd = [
+        'ffmpeg', '-y',
+        '-ss', timestamp,
+        '-i', video_path,
+        '-vframes', '1',
+        '-q:v', '2',
+        output_path
+    ]
+    
+    logger.info(f"📸 Generating thumbnail: {video_path} @ {timestamp}")
+    try:
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        file_size = os.path.getsize(output_path)
+        file_url = f"http://{HOST_IP}:5000/uploads/{output_filename}"
+        
+        return {
+            'filename': output_filename,
+            'url': file_url,
+            'type': 'jpg',
+            'size': file_size,
+            'source': 'local_ffmpeg_thumbnail'
+        }
+    except Exception as e:
+        logger.error(f"Thumbnail generation failed: {e}")
+        raise Exception(f"Thumbnail generation failed: {e}")
 
 def create_video_from_image(image_url, duration=5, width=1280, height=720, text_overlay=None, srt_path=None, font_name="Arial", zoom_pan=False):
     """
