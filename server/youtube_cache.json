@@ -43,5 +43,14 @@
     "duration": 17,
     "size": 25869936,
     "size_mb": 24.67
+  },
+  "https://www.youtube.com/watch?v=aqz-KE-bpKQ": {
+    "filename": "9c67b117-d164-4abd-b5c0-03090bf62cc5.mp4",
+    "path": "C:\\CODE\\GIT\\MCP-NCA-TOOLKIT\\uploads\\9c67b117-d164-4abd-b5c0-03090bf62cc5.mp4",
+    "url": "http://192.168.178.25:5000/uploads/9c67b117-d164-4abd-b5c0-03090bf62cc5.mp4",
+    "title": "Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film",
+    "duration": 635,
+    "size": 743401691,
+    "size_mb": 708.96
   }
 }
