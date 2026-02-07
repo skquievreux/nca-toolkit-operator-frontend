@@ -92,7 +92,7 @@
             {
                 "id": "transcribe",
                 "type": "nca_api",
-                "endpoint": "/transcribe",
+                "endpoint": "/v1/media/transcribe",
                 "params": {
                     "media_url": "{{yt.url}}",
                     "language": "de"

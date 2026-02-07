@@ -57,6 +57,7 @@ def extract_intent_and_params(user_message, uploaded_files=None, language=None):
     
     try:
         # Build context
+        context = ""
         if language:
             context += f"Bevorzugte Sprache: {language}\n"
             

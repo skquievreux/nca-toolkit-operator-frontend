@@ -93,20 +93,29 @@ def download_youtube_video(url, format='best'):
             'no_warnings': False,
             'nocheckcertificate': True,
             'ignoreerrors': False,
+            # Use specific clients to bypass some 403 blocks
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['web', 'ios', 'mweb', 'android'],
+                    'player_skip_unplayable': [True]
+                }
+            },
             # Common headers to behave like a browser
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-us,en;q=0.5',
             }
         }
         
         # Check if ffmpeg is available and tell yt-dlp where it is if possible
+        ffmpeg_path = None
         try:
              import subprocess
              result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
              if result.returncode == 0:
                   logger.info("🎬 FFmpeg detected by yt-dlp")
+                  # yt-dlp usually finds it in PATH, but we could explicitly set it if needed
         except:
              logger.warning("⚠️ FFmpeg NOT detected in PATH for yt-dlp")
 
