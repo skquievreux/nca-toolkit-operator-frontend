@@ -1190,3 +1190,136 @@ function renderResultData(result) {
     return html;
 }
 
+// ===== Initialization =====
+document.addEventListener('DOMContentLoaded', () => {
+    // ... existing init ...
+
+    // Add RSS button listeners
+    const rssBtn = document.getElementById('generateRssVideoBtn');
+    if (rssBtn) {
+        rssBtn.addEventListener('click', () => handleRssVideoGeneration());
+    }
+    const browseRssBtn = document.getElementById('browseRssBtn');
+    if (browseRssBtn) {
+        browseRssBtn.addEventListener('click', handleBrowseRss);
+    }
+});
+
+async function handleRssVideoGeneration(item = null) {
+    // Hide welcome message
+    const welcomeMsg = document.querySelector('.welcome-message');
+    if (welcomeMsg) welcomeMsg.style.display = 'none';
+
+    const title = item ? item.title : 'neuesten RSS-Item';
+    addMessage('user', `📺 Generiere Video von: ${title}`);
+
+    const processingMsg = addMessage('assistant', '🤖 Initialisiere RSS-Processing...');
+    const progressDiv = createProgressBar();
+    processingMsg.querySelector('.message-content').appendChild(progressDiv);
+
+    try {
+        const progressFill = progressDiv.querySelector('.progress-fill');
+        const progressText = progressDiv.querySelector('.progress-text');
+
+        if (progressFill) progressFill.style.width = '20%';
+        if (progressText) progressText.textContent = 'Bereite Media-URLs vor...';
+
+        const body = item ? JSON.stringify({
+            image_url: item.image_url,
+            audio_url: item.audio_url,
+            title: item.title
+        }) : JSON.stringify({});
+
+        const response = await fetch(`${CONFIG.apiUrl}/api/rss/process`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || 'Serverfehler bei RSS-Verarbeitung');
+        }
+
+        const data = await response.json();
+
+        if (progressFill) progressFill.style.width = '100%';
+        if (progressText) progressText.textContent = 'Fertig!';
+
+        // Remove processing message
+        elements.messages.removeChild(processingMsg);
+
+        // Success Message
+        const successContent = `
+            ✅ **Video erfolgreich generiert!**
+            
+            **Titel:** ${data.item.title}
+        `;
+
+        addMessage('assistant', successContent, {
+            item: data.item,
+            result: data.result
+        });
+
+        addLogMessage(`📺 RSS Video generiert: ${data.item.title}`, 'success');
+
+    } catch (error) {
+        if (processingMsg.parentNode) {
+            elements.messages.removeChild(processingMsg);
+        }
+        addMessage('assistant', `❌ RSS Fehler: ${error.message}`, { error: error.message });
+        addLogMessage(`❌ RSS Fehler: ${error.message}`, 'error');
+    }
+}
+
+async function handleBrowseRss() {
+    addLogMessage('🔍 Lade RSS Feed...');
+    try {
+        const resp = await fetch(`${CONFIG.apiUrl}/api/rss/list`);
+        const data = await resp.json();
+
+        if (data.success) {
+            showRssBrowser(data.items);
+        }
+    } catch (error) {
+        addLogMessage('❌ Fehler beim Laden des Feeds', 'error');
+        alert('Fehler beim Laden des Feeds');
+    }
+}
+
+function showRssBrowser(items) {
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.style.zIndex = '10002';
+
+    const itemsHtml = items.map(item => `
+        <div class="rss-browser-item" style="display: flex; gap: 15px; padding: 15px; border-bottom: 1px solid var(--border-color); align-items: center; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+            <img src="${item.image_url}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px;">
+            <div style="flex: 1;">
+                <h4 style="margin: 0 0 5px 0; font-size: 1rem;">${item.title}</h4>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">
+                    ${item.audio_url ? '🎵 Audio verfügbar' : '❌ Kein Audio'}
+                </div>
+            </div>
+            <button class="btn-primary btn-sm" onclick="this.closest('.modal').remove(); window.handleRssVideoGeneration(${JSON.stringify(item).replace(/"/g, '&quot;')})">Video bauen</button>
+        </div>
+    `).join('');
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2>📡 RSS Feed Browser</h2>
+                <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+            </div>
+            <div class="modal-body" style="max-height: 500px; overflow-y: auto; padding: 0;">
+                ${itemsHtml}
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="this.closest('.modal').remove()">Schließen</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    window.handleRssVideoGeneration = (item) => handleRssVideoGeneration(item);
+}

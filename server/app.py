@@ -31,6 +31,7 @@ import local_processor  # Local FFmpeg support
 from llm_service import extract_intent_and_params
 from workflow_engine import WorkflowEngine
 from api_helpers import safe_api_call, validate_params
+import rss_service
 
 # Logging konfigurieren (mit Rotation und konfigurierbaren Levels)
 from logging_config import setup_logging, get_logger
@@ -1030,6 +1031,88 @@ def read_doc():
         return jsonify({'content': content})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/rss/list', methods=['GET'])
+def list_rss_items():
+    """Gibt die neuesten Items aus dem RSS-Feed zurück"""
+    limit = request.args.get('limit', default=10, type=int)
+    items = rss_service.get_rss_items(limit=limit)
+    return jsonify({'success': True, 'items': items})
+
+
+@app.route('/api/rss/latest', methods=['GET'])
+def get_latest_rss():
+    """Gibt das neueste Item aus dem RSS-Feed zurück"""
+    item = rss_service.get_latest_rss_item()
+    if not item:
+        return jsonify({'success': False, 'error': 'Konnte RSS-Feed nicht lesen'}), 500
+    return jsonify({'success': True, 'item': item})
+
+
+@app.route('/api/rss/process', methods=['POST'])
+def process_rss_item():
+    """
+    Orchestriert die Erstellung eines Videos aus einem RSS-Item oder manuellen URLs
+    """
+    data = request.get_json()
+    image_url = data.get('image_url')
+    audio_url = data.get('audio_url')
+    title = data.get('title', 'RSS Video')
+
+    if not image_url or not audio_url:
+        # Fallback auf neuestes Item wenn nichts übergeben wurde
+        item = rss_service.get_latest_rss_item()
+        if not item or not item['image_url'] or not item['audio_url']:
+            return jsonify({'success': False, 'error': 'Bild/Audio URL fehlt'}), 400
+        image_url = item['image_url']
+        audio_url = item['audio_url']
+        title = item['title']
+
+    logger.info(f"🚀 Starte RSS-to-Video Processing für: {title}")
+
+    try:
+        # Schritt 1: Image -> Video (30s)
+        logger.info(f"Schritt 1: Konvertiere Bild zu Video (30s)... URL: {item['image_url']}")
+        step1_params = {
+            'image_url': item['image_url'],
+            'duration': 30,
+            'zoom': True
+        }
+        
+        headers = {'x-api-key': NCA_API_KEY, 'Content-Type': 'application/json'}
+        resp1 = requests.post(f"{NCA_API_URL}/v1/image/convert/video", json=step1_params, headers=headers, timeout=600)
+        
+        if not resp1.ok:
+            return jsonify({'success': False, 'error': f'Schritt 1 fehlgeschlagen: {resp1.text}'}), 500
+        
+        video_url = resp1.json().get('output_url')
+        if not video_url:
+             return jsonify({'success': False, 'error': 'Schritt 1 lieferte keine Video-URL'}), 500
+
+        # Schritt 2: Audio hinzufügen
+        logger.info(f"Schritt 2: Füge Audio hinzu... URL: {item['audio_url']}")
+        step2_params = {
+            'video_url': video_url,
+            'audio_url': item['audio_url']
+        }
+        
+        resp2 = requests.post(f"{NCA_API_URL}/v1/video/add/audio", json=step2_params, headers=headers, timeout=600)
+        if not resp2.ok:
+            return jsonify({'success': False, 'error': f'Schritt 2 fehlgeschlagen: {resp2.text}'}), 500
+
+        final_result = resp2.json()
+        
+        return jsonify({
+            'success': True,
+            'message': 'RSS Video erfolgreich generiert',
+            'item': item,
+            'result': final_result
+        })
+
+    except Exception as e:
+        logger.exception("Fehler bei RSS Orchestrierung")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == '__main__':
