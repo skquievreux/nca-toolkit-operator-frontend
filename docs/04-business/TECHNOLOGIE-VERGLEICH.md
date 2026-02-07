@@ -1,4 +1,11 @@
-# 🔍 Technologie-Vergleich: Vanilla JS vs. Next.js
+---
+title: "Technologie-Vergleich & Architektur-Entscheidungen"
+type: "business"
+status: "approved"
+last_updated: "2026-02-07"
+---
+
+# Technologie-Vergleich & Architektur-Entscheidungen
 
 **Projekt:** NCA Toolkit Frontend
 **Status:** Analysis & Recommendation
@@ -166,71 +173,71 @@ Deployment:
 
 ### Performance
 
-| Metrik | Vanilla JS + Flask | Next.js (SSR) | Next.js (Static) |
-|--------|-------------------|---------------|------------------|
-| **Initial Load** | 🟢 50-100ms | 🟡 200-400ms | 🟢 50-150ms |
-| **Interaktivität** | 🟢 Sofort | 🟢 Sofort | 🟢 Sofort |
-| **Bundle Size** | 🟢 ~50KB | 🟡 ~200KB | 🟡 ~200KB |
-| **Build Time** | 🟢 Keine | 🟡 10-30s | 🟡 10-30s |
-| **Hot Reload** | 🟢 Instant | 🟢 <1s | 🟢 <1s |
-| **SEO** | 🔴 Schlecht | 🟢 Exzellent | 🟢 Exzellent |
+| Metrik             | Vanilla JS + Flask | Next.js (SSR) | Next.js (Static) |
+| ------------------ | ------------------ | ------------- | ---------------- |
+| **Initial Load**   | 🟢 50-100ms         | 🟡 200-400ms   | 🟢 50-150ms       |
+| **Interaktivität** | 🟢 Sofort           | 🟢 Sofort      | 🟢 Sofort         |
+| **Bundle Size**    | 🟢 ~50KB            | 🟡 ~200KB      | 🟡 ~200KB         |
+| **Build Time**     | 🟢 Keine            | 🟡 10-30s      | 🟡 10-30s         |
+| **Hot Reload**     | 🟢 Instant          | 🟢 <1s         | 🟢 <1s            |
+| **SEO**            | 🔴 Schlecht         | 🟢 Exzellent   | 🟢 Exzellent      |
 
 **Fazit:** Vanilla JS ist schneller für simple Apps, Next.js besser für SEO und große Apps.
 
 ### Developer Experience (DX)
 
-| Feature | Vanilla JS | Next.js |
-|---------|-----------|---------|
-| **Type Safety** | 🔴 Nein (ohne TS) | 🟢 Ja (TypeScript) |
-| **Component Model** | 🟡 Manuell | 🟢 React |
-| **State Management** | 🟡 Global vars | 🟢 Zustand/Context |
-| **Routing** | 🔴 Manuell | 🟢 File-based |
-| **Hot Module Reload** | 🟡 Reload | 🟢 Instant |
-| **IDE Support** | 🟡 Basic | 🟢 Exzellent |
-| **Debugging** | 🟡 Console | 🟢 React DevTools |
-| **Testing** | 🟡 Manual | 🟢 Jest + RTL |
-| **Code Organization** | 🟡 Manual | 🟢 Conventions |
+| Feature               | Vanilla JS       | Next.js           |
+| --------------------- | ---------------- | ----------------- |
+| **Type Safety**       | 🔴 Nein (ohne TS) | 🟢 Ja (TypeScript) |
+| **Component Model**   | 🟡 Manuell        | 🟢 React           |
+| **State Management**  | 🟡 Global vars    | 🟢 Zustand/Context |
+| **Routing**           | 🔴 Manuell        | 🟢 File-based      |
+| **Hot Module Reload** | 🟡 Reload         | 🟢 Instant         |
+| **IDE Support**       | 🟡 Basic          | 🟢 Exzellent       |
+| **Debugging**         | 🟡 Console        | 🟢 React DevTools  |
+| **Testing**           | 🟡 Manual         | 🟢 Jest + RTL      |
+| **Code Organization** | 🟡 Manual         | 🟢 Conventions     |
 
 **Fazit:** Next.js bietet massiv bessere DX für größere Teams und Projekte.
 
 ### Maintainability
 
-| Aspekt | Vanilla JS | Next.js |
-|--------|-----------|---------|
-| **Code Complexity** | 🟢 Einfach | 🟡 Mehr Abstraktion |
-| **Refactoring** | 🔴 Fehleranfällig | 🟢 Type-safe |
-| **Dependency Updates** | 🟢 Wenige | 🟡 Viele |
-| **Breaking Changes** | 🟢 Selten | 🟡 Häufiger |
-| **Learning Curve** | 🟢 Niedrig | 🟡 Mittel-Hoch |
-| **Long-term Support** | 🟢 Stabil | 🟢 Aktiv entwickelt |
+| Aspekt                 | Vanilla JS       | Next.js            |
+| ---------------------- | ---------------- | ------------------ |
+| **Code Complexity**    | 🟢 Einfach        | 🟡 Mehr Abstraktion |
+| **Refactoring**        | 🔴 Fehleranfällig | 🟢 Type-safe        |
+| **Dependency Updates** | 🟢 Wenige         | 🟡 Viele            |
+| **Breaking Changes**   | 🟢 Selten         | 🟡 Häufiger         |
+| **Learning Curve**     | 🟢 Niedrig        | 🟡 Mittel-Hoch      |
+| **Long-term Support**  | 🟢 Stabil         | 🟢 Aktiv entwickelt |
 
 **Fazit:** Vanilla JS einfacher zu warten für kleine Projekte, Next.js skaliert besser.
 
 ### Scalability
 
-| Feature | Vanilla JS | Next.js |
-|---------|-----------|---------|
-| **Code Splitting** | 🔴 Manuell | 🟢 Automatisch |
-| **Lazy Loading** | 🟡 Manual | 🟢 Built-in |
-| **Caching** | 🔴 Browser only | 🟢 Multi-layer |
-| **API Routes** | 🔴 Externes Backend | 🟢 Integriert |
-| **Image Optimization** | 🔴 Manuell | 🟢 Automatisch |
-| **Internationalization** | 🔴 Manuell | 🟢 Built-in |
-| **Authentication** | 🔴 Custom | 🟢 NextAuth.js |
+| Feature                  | Vanilla JS         | Next.js       |
+| ------------------------ | ------------------ | ------------- |
+| **Code Splitting**       | 🔴 Manuell          | 🟢 Automatisch |
+| **Lazy Loading**         | 🟡 Manual           | 🟢 Built-in    |
+| **Caching**              | 🔴 Browser only     | 🟢 Multi-layer |
+| **API Routes**           | 🔴 Externes Backend | 🟢 Integriert  |
+| **Image Optimization**   | 🔴 Manuell          | 🟢 Automatisch |
+| **Internationalization** | 🔴 Manuell          | 🟢 Built-in    |
+| **Authentication**       | 🔴 Custom           | 🟢 NextAuth.js |
 
 **Fazit:** Next.js deutlich besser für wachsende Projekte.
 
 ### Deployment & Hosting
 
-| Aspekt | Vanilla JS + Flask | Next.js |
-|--------|-------------------|---------|
-| **Deployment Complexity** | 🟢 Einfach (ein Server) | 🟡 Mittel (mehr Config) |
-| **Hosting Optionen** | 🟢 Jeder Server | 🟢 Vercel, Netlify, etc. |
-| **Kosten** | 🟢 Günstig ($5-20/mo) | 🟢 Vercel Hobby = €0 |
-| **SSL/HTTPS** | 🟡 Manuell | 🟢 Automatisch (Vercel) |
-| **CDN** | 🔴 Manuell | 🟢 Automatisch |
-| **Edge Computing** | 🔴 Nein | 🟢 Ja (Edge Runtime) |
-| **Serverless** | 🔴 Nein | 🟢 Ja |
+| Aspekt                    | Vanilla JS + Flask     | Next.js                 |
+| ------------------------- | ---------------------- | ----------------------- |
+| **Deployment Complexity** | 🟢 Einfach (ein Server) | 🟡 Mittel (mehr Config)  |
+| **Hosting Optionen**      | 🟢 Jeder Server         | 🟢 Vercel, Netlify, etc. |
+| **Kosten**                | 🟢 Günstig ($5-20/mo)   | 🟢 Vercel Hobby = €0     |
+| **SSL/HTTPS**             | 🟡 Manuell              | 🟢 Automatisch (Vercel)  |
+| **CDN**                   | 🔴 Manuell              | 🟢 Automatisch           |
+| **Edge Computing**        | 🔴 Nein                 | 🟢 Ja (Edge Runtime)     |
+| **Serverless**            | 🔴 Nein                 | 🟢 Ja                    |
 
 **Fazit:** Next.js besser für globale Distribution, Vanilla JS einfacher für lokales Setup.
 

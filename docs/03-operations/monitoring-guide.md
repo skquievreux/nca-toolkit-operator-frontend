@@ -1,4 +1,11 @@
-# 🔍 Docker Container Monitoring & Debugging Guide
+---
+title: "Docker Monitoring & Debugging Guide"
+type: "operations"
+status: "approved"
+last_updated: "2026-02-07"
+---
+
+# Docker Monitoring & Debugging Guide
 
 ## Übersicht
 

@@ -1,4 +1,11 @@
-# 🚀 Quick Start Guide
+---
+title: "Quick Start Guide"
+type: "implementation"
+status: "approved"
+last_updated: "2026-02-07"
+---
+
+# Quick Start Guide
 
 ## Einfacher Server-Start (wie `pnpm run dev`)
 

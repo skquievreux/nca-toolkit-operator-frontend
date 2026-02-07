@@ -1,4 +1,11 @@
-# 📊 Terminal-Analyse - NCA Toolkit Setup
+---
+title: "Terminal-Analyse & System-Status"
+type: "reference"
+status: "approved"
+last_updated: "2026-02-07"
+---
+
+# Terminal-Analyse - NCA Toolkit Setup
 
 ## ✅ Status-Übersicht
 

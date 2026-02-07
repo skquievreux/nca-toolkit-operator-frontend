@@ -1,4 +1,11 @@
-# ✅ PROOF OF CONCEPT - Funktionierender Test!
+---
+title: "Proof of Concept: Funktionstest"
+type: "business"
+status: "approved"
+last_updated: "2026-02-07"
+---
+
+# Proof of Concept - Funktionierender Test!
 
 ## 🎯 Schnelltest (funktioniert SOFORT!)
 

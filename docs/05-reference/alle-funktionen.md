@@ -1,4 +1,11 @@
-# 📚 NCA Toolkit - Alle verfügbaren Funktionen
+---
+title: "NCA Toolkit - API-Refenz & Funktionen"
+type: "reference"
+status: "approved"
+last_updated: "2026-02-07"
+---
+
+# NCA Toolkit - Alle verfügbaren Funktionen
 
 **Version:** 1.0.0  
 **Quelle:** [stephengpope/no-code-architects-toolkit](https://github.com/stephengpope/no-code-architects-toolkit)

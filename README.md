@@ -116,10 +116,12 @@ MCP-NCA-TOOLKIT/
 │   ├── styles.css         # Premium Dark Mode
 │   └── app.js             # JavaScript Logic
 │
-├── docs/                  # Documentation
-│   ├── ARCHITEKTUR-PLAN.md
-│   ├── SPRINT.md
-│   └── API.md
+├── docs/                  # Standardisierte Dokumentation (v3.0)
+│   ├── 01-architecture/   # Konzepte & Architektur
+│   ├── 02-implementation/ # Setup & Integration
+│   ├── 03-operations/     # Betrieb & Maintenance
+│   ├── 04-business/       # Berichte & Strategie
+│   └── 05-reference/      # API & Referenzen
 │
 ├── uploads/               # Uploaded Files
 ├── docker-compose.yml     # Docker Setup
@@ -304,10 +306,10 @@ docker-compose restart
 
 ## 📚 Dokumentation
 
-- **[Architektur-Plan](docs/ARCHITEKTUR-PLAN.md)** - Vollständige Architektur
-- **[Sprint-Dokumentation](docs/SPRINT.md)** - Entwicklungs-Sprint
-- **[API-Dokumentation](docs/API.md)** - API-Referenz
-- **[Monitoring-Guide](MONITORING-GUIDE.md)** - Docker-Monitoring
+- **[Architektur-Plan](docs/01-architecture/architektur-plan.md)** - Vollständige Systemarchitektur
+- **[Quick Start Guide](docs/02-implementation/quick-start.md)** - Schnelleinstieg
+- **[Monitoring-Guide](docs/03-operations/monitoring-guide.md)** - Docker & Debugging
+- **[API-Referenz](docs/05-reference/alle-funktionen.md)** - Alle Endpunkte
 
 ---
 

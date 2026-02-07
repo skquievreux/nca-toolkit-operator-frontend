@@ -1,4 +1,11 @@
-# 🎯 NCA Toolkit Stabilisierungs-Plan
+---
+title: "NCA Toolkit Stabilisierungs-Plan"
+type: "business"
+status: "approved"
+last_updated: "2026-02-07"
+---
+
+# NCA Toolkit Stabilisierungs-Plan
 
 **Datum:** 2026-01-08  
 **Status:** In Planung  

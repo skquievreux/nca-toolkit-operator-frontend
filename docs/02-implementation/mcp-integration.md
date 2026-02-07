@@ -1,3 +1,10 @@
+---
+title: "MCP-Server-Integration für NCA Toolkit"
+type: "implementation"
+status: "approved"
+last_updated: "2026-02-07"
+---
+
 # MCP-Server-Integration für NCA Toolkit
 
 ## Übersicht

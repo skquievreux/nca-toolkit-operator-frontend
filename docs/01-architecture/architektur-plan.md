@@ -1,4 +1,13 @@
-# 🏗️ NCA Toolkit - Vollständige Architektur & Implementierungsplan
+---
+title: "Architektur-Plan und Implementierungsstrategie"
+type: "architecture"
+status: "approved"
+last_updated: "2026-02-07"
+---
+
+# Architektur-Plan und Implementierungsstrategie
+
+Dieses Dokument beschreibt die technische Architektur des NCA Toolkits, die LLM-Integration sowie den schrittweisen Implementierungsplan.
 
 ## 📋 Inhaltsverzeichnis
 1. [Problemanalyse](#problemanalyse)

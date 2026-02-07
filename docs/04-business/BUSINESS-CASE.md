@@ -1,4 +1,11 @@
-# 📊 Business Case: NCA Toolkit AI-Powered Media Processing Interface
+---
+title: "Business Case: NCA Toolkit Interface"
+type: "business"
+status: "approved"
+last_updated: "2026-02-07"
+---
+
+# Business Case: NCA Toolkit AI-Powered Media Processing Interface
 
 **Document Type:** Business Case
 **Status:** Approved
@@ -51,12 +58,12 @@ This project aligns with the **AI Agent Governance Framework v3.0** philosophy:
 
 **Alignment with Framework Principles:**
 
-| Framework Principle | Implementation |
-|-------------------|----------------|
+| Framework Principle          | Implementation                                                    |
+| ---------------------------- | ----------------------------------------------------------------- |
 | Optimize for iteration speed | Flask backend with hot reload, Gemini 2.0 Flash (~500ms response) |
-| Document decisions | Comprehensive docs in `/docs`, ADRs for architecture choices |
-| Automate enforcement | Semantic versioning, automated testing, CI/CD pipeline |
-| Learn from production | Monitoring with Sentry, Analytics, regular quarterly reviews |
+| Document decisions           | Comprehensive docs in `/docs`, ADRs for architecture choices      |
+| Automate enforcement         | Semantic versioning, automated testing, CI/CD pipeline            |
+| Learn from production        | Monitoring with Sentry, Analytics, regular quarterly reviews      |
 
 ### Portfolio Position
 
@@ -99,12 +106,12 @@ Fits into:
 
 ### Competitive Landscape
 
-| Solution | Approach | Pros | Cons |
-|----------|----------|------|------|
-| **Direct API** | Manual cURL/Postman | Full control | Steep learning curve |
-| **Custom Scripts** | Python automation | Repeatable | Not user-friendly |
-| **Commercial Tools** | Zapier, n8n | No-code | Expensive, limited flexibility |
-| **Our Solution** | AI + Web UI | Best UX, flexible | Requires API access |
+| Solution             | Approach            | Pros              | Cons                           |
+| -------------------- | ------------------- | ----------------- | ------------------------------ |
+| **Direct API**       | Manual cURL/Postman | Full control      | Steep learning curve           |
+| **Custom Scripts**   | Python automation   | Repeatable        | Not user-friendly              |
+| **Commercial Tools** | Zapier, n8n         | No-code           | Expensive, limited flexibility |
+| **Our Solution**     | AI + Web UI         | Best UX, flexible | Requires API access            |
 
 **Competitive Advantage:**
 - Only solution with natural language interface for NCA Toolkit
@@ -403,22 +410,22 @@ Operating Environment:
 
 **Technical Risks:**
 
-| Risk | Probability | Impact | Severity |
-|------|-------------|--------|----------|
-| LLM misinterprets intent | Medium | Medium | 🟡 Medium |
-| API rate limiting | Low | Low | 🟢 Low |
-| File upload failures | Medium | Low | 🟢 Low |
-| Docker container downtime | Low | High | 🟡 Medium |
-| Security vulnerability | Low | High | 🟡 Medium |
+| Risk                      | Probability | Impact | Severity |
+| ------------------------- | ----------- | ------ | -------- |
+| LLM misinterprets intent  | Medium      | Medium | 🟡 Medium |
+| API rate limiting         | Low         | Low    | 🟢 Low    |
+| File upload failures      | Medium      | Low    | 🟢 Low    |
+| Docker container downtime | Low         | High   | 🟡 Medium |
+| Security vulnerability    | Low         | High   | 🟡 Medium |
 
 **Business Risks:**
 
-| Risk | Probability | Impact | Severity |
-|------|-------------|--------|----------|
-| Low adoption (internal) | Low | Medium | 🟢 Low |
-| Gemini API pricing changes | Medium | Low | 🟢 Low |
-| Scope creep | High | Medium | 🟡 Medium |
-| Maintenance burden | Medium | Medium | 🟡 Medium |
+| Risk                       | Probability | Impact | Severity |
+| -------------------------- | ----------- | ------ | -------- |
+| Low adoption (internal)    | Low         | Medium | 🟢 Low    |
+| Gemini API pricing changes | Medium      | Low    | 🟢 Low    |
+| Scope creep                | High        | Medium | 🟡 Medium |
+| Maintenance burden         | Medium      | Medium | 🟡 Medium |
 
 #### Risk Analysis
 
@@ -843,16 +850,16 @@ Focus: Intelligence + Automation
 
 ### Framework Compliance Matrix
 
-| Framework Requirement | Compliance Status | Evidence |
-|----------------------|-------------------|----------|
-| **Package Management** | ⚠️ Partial | Python (pip) not PNPM, but versioned |
-| **Versioning** | ⏳ Planned | semantic-release to be implemented |
-| **Documentation** | ✅ Compliant | Structured docs/ folder |
-| **Code Quality** | ✅ Compliant | Type hints, linting, testing |
-| **Testing** | ⚠️ Partial | Basic tests, need >70% coverage |
-| **Deployment** | ✅ Compliant | Docker, env vars, CI/CD ready |
-| **Monitoring** | ⏳ Planned | Sentry integration planned |
-| **AI Agent Guidelines** | ✅ Compliant | Follows behavioral guidelines |
+| Framework Requirement   | Compliance Status | Evidence                             |
+| ----------------------- | ----------------- | ------------------------------------ |
+| **Package Management**  | ⚠️ Partial         | Python (pip) not PNPM, but versioned |
+| **Versioning**          | ⏳ Planned         | semantic-release to be implemented   |
+| **Documentation**       | ✅ Compliant       | Structured docs/ folder              |
+| **Code Quality**        | ✅ Compliant       | Type hints, linting, testing         |
+| **Testing**             | ⚠️ Partial         | Basic tests, need >70% coverage      |
+| **Deployment**          | ✅ Compliant       | Docker, env vars, CI/CD ready        |
+| **Monitoring**          | ⏳ Planned         | Sentry integration planned           |
+| **AI Agent Guidelines** | ✅ Compliant       | Follows behavioral guidelines        |
 
 ### Security & Privacy
 
