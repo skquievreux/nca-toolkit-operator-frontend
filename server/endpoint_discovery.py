@@ -53,15 +53,15 @@ KNOWN_ENDPOINTS = {
         'description': 'Fügt mehrere Videos zusammen (Alternative: /combine-videos)',
         'params': ['video_urls (array)']
     },
-    '/media-to-mp3': {
+    '/v1/media/convert/mp3': {
         'method': 'POST',
-        'description': 'Konvertiert Media zu MP3 (Alternative: /v1/media/convert/mp3)',
+        'description': 'Konvertiert Video/Audio zu MP3 Audio.',
         'params': ['media_url']
     },
-    '/transcribe': {
+    '/v1/media/transcribe': {
         'method': 'POST',
-        'description': 'Transkribiert Audio/Video (Alternative: /v1/media/transcribe)',
-        'params': ['media_url', 'language (optional)']
+        'description': 'Erstellt eine Transkription (Text & Untertitel) aus Audio/Video Dateien. Keywords: Transkript, Untertitel, SRT, Speech-to-Text.',
+        'params': ['media_url', 'language (optional, default: "de")']
     },
     '/v1/video/add/captions': {
         'method': 'POST',

@@ -83,9 +83,14 @@ Zusätzliche LOKALE Funktionen (Server-seitig verfügbar):
    - Beispiel: "Screenshot von google.de" -> endpoint: /v1/image/screenshot/webpage
 
 ** /v1/video/thumbnail **
-   - Beschreibung: Erstellt ein Thumbnail aus einem Video
+   - Beschreibung: Erstellt ein Thumbnail aus einem Video (Bild aus Video)
    - Parameter: url (string - file url)
    - Beispiel: "Mache ein Thumbnail" -> endpoint: /v1/video/thumbnail
+
+** /v1/media/transcribe **
+   - Beschreibung: Transkribiert Audio oder Video zu Text
+   - Parameter: media_url (string)
+   - Beispiel: "Transkribiere das Video" -> endpoint: /v1/media/transcribe
 """
         system_prompt = dynamic_prompt + "\n" + local_capabilities
         
