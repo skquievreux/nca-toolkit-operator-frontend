@@ -732,10 +732,44 @@ def process_job_async(job_id, user_message, conversation_id, uploaded_files, lan
                  }
              except Exception as e:
                  logger.error(f"RSS Job failed: {e}")
-                 # Job fails in outer block
                  raise e
 
-        # 5. Regular Case: Call API
+        # 6. Special Case: Local Thumbnail
+        elif endpoint == '/v1/video/thumbnail':
+             logger.info("📸 Processing Thumbnail locally")
+             from local_processor import create_thumbnail
+             # Ensure we have a valid URL
+             video_url = job_params.get('url') or job_params.get('video_url')
+             if not video_url:
+                 raise ValueError("Missing 'url' or 'video_url' parameter")
+                 
+             result = create_thumbnail(video_url, job_params.get('timestamp', '00:00:01'))
+             nca_response = {
+                 'success': True,
+                 'message': 'Thumbnail created locally',
+                 'result': result,
+                 'url': result['url'] # Top-level URL for frontend convenience
+             }
+
+        # 7. Special Case: Transcription (Wrapper for better parsing)
+        elif endpoint == '/v1/media/transcribe' or endpoint == '/transcribe':
+             logger.info("🎙️ Processing Transcription (Wrapper)")
+             from llm_service import transcribe_media
+             
+             media_url = job_params.get('media_url') or job_params.get('url')
+             if not media_url:
+                 raise ValueError("Missing 'media_url' parameter")
+                 
+             # Returns {'text':..., 'srt':..., 'language':...}
+             result = transcribe_media(media_url, language=job_params.get('language', 'de'))
+             
+             nca_response = {
+                 'success': True,
+                 'message': 'Transcription completed',
+                 'result': result
+             }
+
+        # 8. Regular Case: Call API
         if not nca_response:
             db_service.update_job(job_id, {
                 'progress': 70,
