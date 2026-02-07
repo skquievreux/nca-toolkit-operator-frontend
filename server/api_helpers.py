@@ -174,6 +174,14 @@ NCA_SCHEMA = {
     '/v1/image/screenshot/webpage': {
         'required': ['url'],
         'aliases': {'site_url': 'url', 'web_url': 'url', 'media_url': 'url'}
+    },
+    '/v1/video/thumbnail': {
+        'required': ['url'],
+        'aliases': {'video_url': 'url', 'media_url': 'url', 'file_url': 'url'}
+    },
+    '/v1/media/transcribe': {
+        'required': ['media_url'],
+        'aliases': {'url': 'media_url', 'video_url': 'media_url', 'audio_url': 'media_url', 'file_url': 'media_url'}
     }
 }
 
