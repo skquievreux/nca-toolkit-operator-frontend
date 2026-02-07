@@ -198,7 +198,7 @@ def create_video_from_image(image_url, duration=5, width=1280, height=720, text_
              safe_srt_path = srt_path.replace("\\", "/").replace(":", "\\\\:")
              
         subtitle_filter = f"subtitles='{safe_srt_path}':force_style='Fontname={font_name},FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=1,Shadow=1,MarginV=20'"
-        vf_chain += f",{subtitle_filter}"
+        vf_chain = vf_chain.rstrip(',') + f",{subtitle_filter}"
         logger.info(f"🎞️ Subtitle filter applied: {subtitle_filter}")
 
     # 2. Add Drawtext Filter if text is provided (Fallback/Overlay)
@@ -219,7 +219,7 @@ def create_video_from_image(image_url, duration=5, width=1280, height=720, text_
             f"fontcolor=white:fontsize=h/20:box=1:boxcolor=black@0.5:"
             f"boxborderw=5:x=(w-text_w)/2:y=h-(text_h*2)"
         )
-        vf_chain += f",{drawtext}"
+        vf_chain = vf_chain.rstrip(',') + f",{drawtext}"
 
     logger.warning(f"🎬 [VER5] FINAL VF_CHAIN: {vf_chain}")
     cmd = [

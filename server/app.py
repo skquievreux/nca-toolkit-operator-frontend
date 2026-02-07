@@ -1041,7 +1041,7 @@ def health_check():
         nca_status = 'unknown'
         try:
             # NCA Toolkit Check ist optional
-            resp = requests.post(f"{NCA_API_URL}/authenticate", headers={'x-api-key': NCA_API_KEY}, timeout=2)
+            resp = requests.post(f"{NCA_API_URL}/v1/toolkit/authenticate", headers={'x-api-key': NCA_API_KEY}, timeout=2)
             nca_status = 'healthy' if resp.status_code in [200, 401, 405] else f'unhealthy ({resp.status_code})'
         except:
             nca_status = 'unreachable'

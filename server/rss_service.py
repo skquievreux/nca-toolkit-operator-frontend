@@ -180,29 +180,7 @@ def generate_rss_video(image_url, audio_url, title="RSS Video", background_music
         logger.error(f"Asset download failed: {e}")
         raise Exception(f"Asset download failed: {e}")
 
-    # 1.5 Generate SRT if subtitles enabled
-    srt_path = None
-    if render_subtitles:
-        try:
-            from llm_service import transcribe_media
-            logger.info("🎙️ Requesting high-precision transcription via centralized service...")
-            
-            # Use URL for container access (NCA Toolkit needs http://...)
-            transcription = transcribe_media(local_audio_url, language="de")
-            
-            srt_content = transcription.get('srt')
-            
-            if srt_content and len(str(srt_content)) > 10:
-                srt_filename = f"subs_{uuid.uuid4().hex[:8]}.srt"
-                srt_path = os.path.join(UPLOAD_FOLDER, srt_filename)
-                with open(srt_path, 'w', encoding='utf-8') as f:
-                    f.write(srt_content)
-                logger.info(f"✅ SRT generated and saved: {srt_path}")
-            else:
-                logger.warning("Centralized transcription did not return valid SRT content")
-                        
-        except Exception as e:
-            logger.error(f"Error during transcription call: {e}")
+    # 1.5 Transcription already handled at step 1
 
     # 2. Create Video from Image (Loop/Slideshow)
     try:
